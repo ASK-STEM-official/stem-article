@@ -121,9 +121,9 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
               <>
                 {/* アバターをプロフィールページへのリンクに変更 */}
                 <Link to={`/users/${user.uid}`} className="flex items-center space-x-3 cursor-pointer">
-                  {user.photoURL ? (
+                  {user.avatarUrl ? (
                     <img
-                      src={user.photoURL}
+                      src={user.avatarUrl}
                       alt={user.displayName}
                       className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md transition-transform duration-300 transform hover:scale-110"
                     />
