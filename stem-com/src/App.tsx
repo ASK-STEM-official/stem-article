@@ -30,12 +30,6 @@ import { Github } from "lucide-react";
 import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
 
-// Firebaseの初期化（既に設定済みの場合は不要）
-import { initializeApp } from "firebase/app";
-import { firebaseConfig } from "./firebaseConfig"; // Firebase設定ファイルをインポート
-
-initializeApp(firebaseConfig);
-
 interface UserData {
   avatarUrl: string;
   displayName: string;
