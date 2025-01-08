@@ -15,6 +15,12 @@ import {
   GithubAuthProvider,
   signOut,
 } from "firebase/auth";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+} from "firebase/firestore"; // Firestore用
 import ArticleList from "./pages/ArticleList.tsx";
 import Profileset from "./pages/Profile-set.tsx";
 import ArticleDetail from "./pages/ArticleDetail.tsx";
@@ -47,7 +53,8 @@ const App = () => {
    * GitHub認証ボタンを押下した際のイベントハンドラ。
    * Firebase Authの signInWithPopup を使ってGitHubログインを行う。
    * ログイン後、取得したトークンを使ってGitHub APIを呼び出し、
-   * ユーザーが指定の組織(ganon-test)に所属しているかを確認する。
+   * ユーザーが指定の組織(ASK-STEM-official)に所属しているかを確認する。
+   * 組織に所属していれば、Firestoreにユーザーデータを保存する（既存のものがあれば上書きしない）。
    */
   const handleGitHubLogin = async () => {
     try {
@@ -80,7 +87,7 @@ const App = () => {
       }
 
       const organizations = await response.json();
-      // 指定の組織に入っているかチェック
+      // 指定の組織に入っているかチェック (ここでは ASK-STEM-official を想定)
       const isInOrganization = organizations.some(
         (org: { login: string }) => org.login === "ASK-STEM-official"
       );
@@ -88,6 +95,9 @@ const App = () => {
       if (isInOrganization) {
         // 組織に所属している場合のみログイン許可
         setUser(result.user);
+
+        // Firestore にユーザー情報を保存（上書きしない）
+        await saveUserData(result.user);
       } else {
         // 組織に所属していない場合はエラー扱い
         throw new Error("指定された組織に所属していません。ログインを許可できません。");
@@ -97,6 +107,62 @@ const App = () => {
       setErrorMessage(
         error.message || "ログインに失敗しました。もう一度試してください。"
       );
+    }
+  };
+
+  /**
+   * ユーザーデータを Firestore に保存する関数。
+   * - avatarUrl : GitHubのプロフィール画像URL
+   * - displayName : GitHubのdisplayName
+   * - bio : 最初は空文字列
+   * すでに存在する場合は「既存データを優先」し、上書きしない。
+   */
+  const saveUserData = async (firebaseUser: any) => {
+    try {
+      const db = getFirestore();
+
+      // Firebase Auth のユーザーIDをドキュメントIDにする
+      const userRef = doc(db, "users", firebaseUser.uid);
+
+      // すでにユーザードキュメントがあるかどうかをチェック
+      const existingDoc = await getDoc(userRef);
+
+      // GitHubアカウントから取得できる値（ログイン直後のFirebase User情報を想定）
+      const githubAvatar = firebaseUser.photoURL || "";
+      const githubDisplayName = firebaseUser.displayName || "";
+
+      if (existingDoc.exists()) {
+        // 既存ドキュメントがある場合は、既存のデータを取得して上書きしないようにする
+        const existingData = existingDoc.data();
+
+        // 既存にない項目だけ追加する（avatarUrl, displayName が空ならGitHubの値を使用し、bioは既存を維持）
+        const mergedData = {
+          // すでにある項目は維持
+          ...existingData,
+          // avatarUrl がまだ登録されていない、または空の場合のみGitHubの画像URLをセット
+          avatarUrl: existingData.avatarUrl
+            ? existingData.avatarUrl
+            : githubAvatar,
+          // displayName がまだ登録されていない場合のみGitHubの表示名をセット
+          displayName: existingData.displayName
+            ? existingData.displayName
+            : githubDisplayName,
+          // bio がなければ空文字のまま。ユーザーが後から入力しているかもしれないので上書きしない
+          bio: existingData.bio ? existingData.bio : "",
+        };
+
+        await setDoc(userRef, mergedData);
+      } else {
+        // ドキュメントが存在しない場合は新規作成する
+        const userData = {
+          avatarUrl: githubAvatar,
+          displayName: githubDisplayName,
+          bio: "", // 初回は空文字
+        };
+        await setDoc(userRef, userData);
+      }
+    } catch (error) {
+      console.error("ユーザーデータの保存に失敗しました:", error);
     }
   };
 
