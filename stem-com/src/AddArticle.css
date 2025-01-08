@@ -1,0 +1,50 @@
+/* src/pages/AddArticle.css */
+
+/* ダークモード時のToast UI Editorのコンテンツエリアのスタイル調整 */
+.dark .toastui-editor-contents {
+    color: #e5e7eb; /* テキストカラーを明るく */
+    background-color: #1f2937; /* 背景色をダークに */
+  }
+  
+  /* ダークモード時のToast UI Editorのツールバーのスタイル */
+  .dark .toastui-editor-defaultUI {
+    background-color: #1f2937; /* ツールバーの背景色をダークに */
+  }
+  
+  .dark .toastui-editor-toolbar {
+    background-color: #374151; /* ツールバーのボタン背景色 */
+  }
+  
+  .dark .toastui-editor-toolbar .toastui-editor-toolbar-icons {
+    color: #e5e7eb; /* ツールバーのアイコンカラー */
+  }
+  
+  /* ダークモード時のMarkdownプレビューのスタイル */
+  .dark .toastui-editor-md-container {
+    background-color: #1f2937; /* プレビューの背景色 */
+    color: #e5e7eb; /* プレビューのテキストカラー */
+  }
+  
+  /* ライトモード時のスタイル（必要に応じて調整） */
+  .light .toastui-editor-contents {
+    color: #1f2937;
+    background-color: #ffffff;
+  }
+  
+  .light .toastui-editor-defaultUI {
+    background-color: #ffffff;
+  }
+  
+  .light .toastui-editor-toolbar {
+    background-color: #f3f4f6;
+  }
+  
+  .light .toastui-editor-toolbar .toastui-editor-toolbar-icons {
+    color: #1f2937;
+  }
+  
+  .light .toastui-editor-md-container {
+    background-color: #ffffff;
+    color: #1f2937;
+  }
+  
