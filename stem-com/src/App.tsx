@@ -1,43 +1,74 @@
 // src/App.tsx
+// このクラスはReactアプリのエントリーポイントであり、GitHubログインによる認証と
+// 指定した組織チェックを行った後、ログインが許可されている場合のみルーティングを行います。
+
 import React, { useState, useEffect } from "react";
-import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom"; // HashRouter をインポート
-import { getAuth, signInWithPopup, GithubAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import {
+  HashRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom"; // HashRouter をインポート
+import {
+  getAuth,
+  signInWithPopup,
+  GithubAuthProvider,
+  signOut,
+} from "firebase/auth";
 import ArticleList from "./pages/ArticleList.tsx";
 import Profileset from "./pages/Profile-set.tsx";
 import ArticleDetail from "./pages/ArticleDetail.tsx";
 import AddArticle from "./pages/AddArticle.tsx";
 import Navbar from "./components/Navbar.tsx";
-import { Github } from 'lucide-react';
+import { Github } from "lucide-react";
 import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
 
 const App = () => {
-  const [user, setUser] = useState(null);
-  const [errorMessage, setErrorMessage] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // user にはログインしているユーザー情報を、errorMessage にはエラー時のメッセージを保持する
+  const [user, setUser] = useState<any>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // ダークモード管理用の state
+  const [darkMode, setDarkMode] = useState<boolean>(false);
+
+  // 初回マウント時にOSのダークモード設定を反映させる
   useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     setDarkMode(prefersDark);
     if (prefersDark) {
-      document.documentElement.classList.add('dark');
+      document.documentElement.classList.add("dark");
     } else {
-      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.remove("dark");
     }
   }, []);
 
+  /**
+   * GitHub認証ボタンを押下した際のイベントハンドラ。
+   * Firebase Authの signInWithPopup を使ってGitHubログインを行う。
+   * ログイン後、取得したトークンを使ってGitHub APIを呼び出し、
+   * ユーザーが指定の組織(ganon-test)に所属しているかを確認する。
+   */
   const handleGitHubLogin = async () => {
     try {
       const auth = getAuth();
       const provider = new GithubAuthProvider();
+
+      // 組織の情報を取得する場合は "read:org" スコープが必要
       provider.addScope("read:org");
 
+      // ポップアップでGitHubログイン
       const result = await signInWithPopup(auth, provider);
-      const credential = GithubAuthProvider.credentialFromResult(result);
-      const token = credential.accessToken;
 
+      // 取得したCredentialからアクセストークンを取り出す
+      const credential = GithubAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
+
+      if (!token) {
+        throw new Error("アクセストークンを取得できませんでした。");
+      }
+
+      // GitHub APIを呼び出してユーザーが所属している組織を取得
       const response = await fetch("https://api.github.com/user/orgs", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -45,48 +76,33 @@ const App = () => {
       });
 
       if (!response.ok) {
-        throw new Error("GitHub APIへのリクエストが失敗しました");
+        throw new Error("GitHub APIへのリクエストが失敗しました。");
       }
 
       const organizations = await response.json();
+      // 指定の組織に入っているかチェック
       const isInOrganization = organizations.some(
-        (org) => org.login === "ganon-test"
+        (org: { login: string }) => org.login === "ASK-STEM-official"
       );
+
       if (isInOrganization) {
+        // 組織に所属している場合のみログイン許可
         setUser(result.user);
       } else {
-        setUser(result.user);
-        console.log("指定された組織に所属していませんがまぁいいでしょう");
+        // 組織に所属していない場合はエラー扱い
+        throw new Error("指定された組織に所属していません。ログインを許可できません。");
       }
-
-    } catch (error) {
+    } catch (error: any) {
       console.error("GitHubログインエラー:", error);
-      setErrorMessage(error.message || "ログインに失敗しました。もう一度試してください。");
+      setErrorMessage(
+        error.message || "ログインに失敗しました。もう一度試してください。"
+      );
     }
   };
 
-  const handleEmailLogin = async () => {
-    try {
-      const auth = getAuth();
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      setUser(result.user);
-    } catch (error) {
-      console.error("Emailログインエラー:", error);
-      setErrorMessage(error.message || "メールログインに失敗しました。");
-    }
-  };
-
-  const handleEmailSignUp = async () => {
-    try {
-      const auth = getAuth();
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      setUser(result.user);
-    } catch (error) {
-      console.error("サインアップエラー:", error);
-      setErrorMessage(error.message || "サインアップに失敗しました。");
-    }
-  };
-
+  /**
+   * ログアウトを行う。
+   */
   const handleLogout = async () => {
     const auth = getAuth();
     try {
@@ -97,15 +113,22 @@ const App = () => {
     }
   };
 
+  /**
+   * ダークモードの切り替え。
+   */
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
     if (!darkMode) {
-      document.documentElement.classList.add('dark');
+      document.documentElement.classList.add("dark");
     } else {
-      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.remove("dark");
     }
   };
 
+  /**
+   * ログインしていない場合は、GitHubログインボタンのみ表示する。
+   * 組織に所属していない/ログインに失敗した場合は、エラーメッセージを表示する。
+   */
   if (!user) {
     return (
       <div className="min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -128,35 +151,6 @@ const App = () => {
               GitHubでログイン
             </button>
 
-            <div className="mt-6">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="メールアドレス"
-                className="w-full px-3 py-2 mb-2 border rounded"
-              />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="パスワード"
-                className="w-full px-3 py-2 mb-2 border rounded"
-              />
-              <button
-                onClick={handleEmailLogin}
-                className="w-full bg-blue-600 text-white px-4 py-2 rounded mb-2"
-              >
-                メールログイン
-              </button>
-              <button
-                onClick={handleEmailSignUp}
-                className="w-full bg-green-600 text-white px-4 py-2 rounded"
-              >
-                サインアップ
-              </button>
-            </div>
-
             {errorMessage && (
               <div className="mt-4 text-sm text-red-600 text-center">
                 {errorMessage}
@@ -168,18 +162,39 @@ const App = () => {
     );
   }
 
+  /**
+   * ログイン後は、メインのルーティングを表示する。
+   * ユーザーが認証されていれば通常の機能（記事の閲覧・投稿・編集など）を利用可能。
+   */
   return (
     <Router>
       <div className="min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        <Navbar user={user} onLogout={handleLogout} toggleDarkMode={toggleDarkMode} darkMode={darkMode} />
+        {/* ナビゲーションバー: ログアウトボタン、テーマ切り替えなど */}
+        <Navbar
+          user={user}
+          onLogout={handleLogout}
+          toggleDarkMode={toggleDarkMode}
+          darkMode={darkMode}
+        />
+
+        {/* ルーティング設定 */}
         <Routes>
+          {/* 新規投稿ページ */}
           <Route path="/add-article" element={<AddArticle />} />
+          {/* 記事詳細ページ */}
           <Route path="/articles/:id" element={<ArticleDetail />} />
+          {/* ユーザープロフィールページ */}
           <Route path="/users/:id" element={<UserProfile />} />
+          {/* プロフィール設定ページ */}
           <Route path="/profileset" element={<Profileset />} />
+          {/* 記事編集ページ */}
           <Route path="/articles/:id/edit" element={<EditArticle />} />
+
+          {/* トップページ -> 記事一覧 */}
           <Route path="/" element={<ArticleList />} />
-          <Route path="*" element={<Navigate to="/" replace />} /> {/* 404 用 */}
+
+          {/* 存在しないページはトップにリダイレクト（404用） */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </Router>
