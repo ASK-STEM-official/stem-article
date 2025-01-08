@@ -291,7 +291,7 @@ const AddArticle: React.FC = () => {
     }
 
     // GitHub上の画像URLを構築
-    const imageUrl = `https://github.com/ganondorofu/Img_save/raw/main/static/images/${fileName}`;
+    const imageUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     return imageUrl;
   };
 
