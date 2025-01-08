@@ -1,6 +1,6 @@
 // src/App.tsx
-// このクラスはReactアプリのエントリーポイントであり、GitHubログインによる認証と
-// 指定した組織チェックを行った後、ログインが許可されている場合のみルーティングを行います。
+// このファイルはReactアプリケーションのエントリーポイントです。
+// GitHubログインによる認証と指定した組織チェックを行った後、Firestoreにユーザーデータを保存・取得します。
 
 import React, { useState, useEffect } from "react";
 import {
@@ -30,9 +30,22 @@ import { Github } from "lucide-react";
 import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
 
+// Firebaseの初期化（既に設定済みの場合は不要）
+import { initializeApp } from "firebase/app";
+import { firebaseConfig } from "./firebaseConfig"; // Firebase設定ファイルをインポート
+
+initializeApp(firebaseConfig);
+
+interface UserData {
+  avatarUrl: string;
+  displayName: string;
+  bio: string;
+  uid: string;
+}
+
 const App = () => {
-  // user にはログインしているユーザー情報を、errorMessage にはエラー時のメッセージを保持する
-  const [user, setUser] = useState<any>(null);
+  // user にはFirestoreから取得したユーザーデータを保持する
+  const [user, setUser] = useState<UserData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // ダークモード管理用の state
@@ -51,17 +64,16 @@ const App = () => {
 
   /**
    * GitHub認証ボタンを押下した際のイベントハンドラ。
-   * Firebase Authの signInWithPopup を使ってGitHubログインを行う。
-   * ログイン後、取得したトークンを使ってGitHub APIを呼び出し、
-   * ユーザーが指定の組織(ASK-STEM-official)に所属しているかを確認する。
-   * 組織に所属していれば、Firestoreにユーザーデータを保存する（既存のものがあれば上書きしない）。
+   * Firebase Authの signInWithPopup を使ってGitHubログインを行い、
+   * ログイン後に取得したトークンで組織所属を確認します。
+   * 所属が確認できたら、Firestoreにユーザーデータを保存・取得します。
    */
   const handleGitHubLogin = async () => {
     try {
       const auth = getAuth();
       const provider = new GithubAuthProvider();
 
-      // 組織の情報を取得する場合は "read:org" スコープが必要
+      // 組織の情報を取得するために "read:org" スコープを追加
       provider.addScope("read:org");
 
       // ポップアップでGitHubログイン
@@ -76,17 +88,17 @@ const App = () => {
       }
 
       // GitHub APIを呼び出してユーザーが所属している組織を取得
-      const response = await fetch("https://api.github.com/user/orgs", {
+      const orgResponse = await fetch("https://api.github.com/user/orgs", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!response.ok) {
+      if (!orgResponse.ok) {
         throw new Error("GitHub APIへのリクエストが失敗しました。");
       }
 
-      const organizations = await response.json();
+      const organizations = await orgResponse.json();
       // 指定の組織に入っているかチェック (ここでは ASK-STEM-official を想定)
       const isInOrganization = organizations.some(
         (org: { login: string }) => org.login === "ASK-STEM-official"
@@ -94,10 +106,12 @@ const App = () => {
 
       if (isInOrganization) {
         // 組織に所属している場合のみログイン許可
-        setUser(result.user);
+        // Firestore にユーザー情報を保存（初回のみ）
+        await saveUserData(result.user, token);
 
-        // Firestore にユーザー情報を保存（上書きしない）
-        await saveUserData(result.user);
+        // Firestore からユーザーデータを取得して setUser
+        const userData = await fetchUserData(result.user.uid);
+        setUser(userData);
       } else {
         // 組織に所属していない場合はエラー扱い
         throw new Error("指定された組織に所属していません。ログインを許可できません。");
@@ -113,11 +127,11 @@ const App = () => {
   /**
    * ユーザーデータを Firestore に保存する関数。
    * - avatarUrl : GitHubのプロフィール画像URL
-   * - displayName : GitHubのdisplayName
+   * - displayName : GitHubのdisplayName または login
    * - bio : 最初は空文字列
    * すでに存在する場合は「既存データを優先」し、上書きしない。
    */
-  const saveUserData = async (firebaseUser: any) => {
+  const saveUserData = async (firebaseUser: any, token: string) => {
     try {
       const db = getFirestore();
 
@@ -127,42 +141,56 @@ const App = () => {
       // すでにユーザードキュメントがあるかどうかをチェック
       const existingDoc = await getDoc(userRef);
 
-      // GitHubアカウントから取得できる値（ログイン直後のFirebase User情報を想定）
-      const githubAvatar = firebaseUser.photoURL || "";
-      const githubDisplayName = firebaseUser.displayName || "";
+      // GitHub APIを使用してユーザーの詳細情報を取得
+      const userResponse = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      if (existingDoc.exists()) {
-        // 既存ドキュメントがある場合は、既存のデータを取得して上書きしないようにする
-        const existingData = existingDoc.data();
+      if (!userResponse.ok) {
+        throw new Error("GitHub APIからユーザー情報の取得に失敗しました。");
+      }
 
-        // 既存にない項目だけ追加する（avatarUrl, displayName が空ならGitHubの値を使用し、bioは既存を維持）
-        const mergedData = {
-          // すでにある項目は維持
-          ...existingData,
-          // avatarUrl がまだ登録されていない、または空の場合のみGitHubの画像URLをセット
-          avatarUrl: existingData.avatarUrl
-            ? existingData.avatarUrl
-            : githubAvatar,
-          // displayName がまだ登録されていない場合のみGitHubの表示名をセット
-          displayName: existingData.displayName
-            ? existingData.displayName
-            : githubDisplayName,
-          // bio がなければ空文字のまま。ユーザーが後から入力しているかもしれないので上書きしない
-          bio: existingData.bio ? existingData.bio : "",
-        };
+      const githubUser = await userResponse.json();
 
-        await setDoc(userRef, mergedData);
-      } else {
+      const githubAvatar = githubUser.avatar_url || "";
+      const githubDisplayName = githubUser.name || githubUser.login || "";
+
+      if (!existingDoc.exists()) {
         // ドキュメントが存在しない場合は新規作成する
         const userData = {
           avatarUrl: githubAvatar,
           displayName: githubDisplayName,
           bio: "", // 初回は空文字
+          uid: firebaseUser.uid,
         };
         await setDoc(userRef, userData);
       }
+      // 既存ドキュメントがある場合は何もしない（既存のデータを保持）
     } catch (error) {
       console.error("ユーザーデータの保存に失敗しました:", error);
+    }
+  };
+
+  /**
+   * Firestore からユーザーデータを取得する関数。
+   */
+  const fetchUserData = async (uid: string): Promise<UserData | null> => {
+    try {
+      const db = getFirestore();
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        return userSnap.data() as UserData;
+      } else {
+        console.warn("ユーザーデータが存在しません。");
+        return null;
+      }
+    } catch (error) {
+      console.error("ユーザーデータの取得に失敗しました:", error);
+      return null;
     }
   };
 
@@ -252,7 +280,7 @@ const App = () => {
           {/* ユーザープロフィールページ */}
           <Route path="/users/:id" element={<UserProfile />} />
           {/* プロフィール設定ページ */}
-          <Route path="/profileset" element={<Profileset />} />
+          <Route path="/profileset" element={<Profileset user={user} />} />
           {/* 記事編集ページ */}
           <Route path="/articles/:id/edit" element={<EditArticle />} />
 
