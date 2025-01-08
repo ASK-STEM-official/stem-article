@@ -1,8 +1,8 @@
 {
-  "name": "stem-com",
+  "name": "stem-article",
   "version": "0.1.0",
   "private": true,
-  "homepage": "/stem-com",
+  "homepage": "/stem-article",
   "dependencies": {
     "@tailwindcss/forms": "^0.5.9",
     "@toast-ui/editor": "^3.2.2",
