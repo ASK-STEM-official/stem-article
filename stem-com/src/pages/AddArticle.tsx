@@ -1,6 +1,18 @@
 // src/pages/AddArticle.tsx
 import React, { useState, useRef, useEffect, FormEvent } from "react";
-import { doc, setDoc, serverTimestamp, collection, getDocs, getDoc } from "firebase/firestore";
+/* 
+   この記事を投稿するコンポーネント。Firebase Firestore にタイトルや本文、編集者などを保存し、
+   Base64形式の画像をGitHubにアップロードしてURL化する。
+   今回の修正として、"discord" というフィールドを firestore に追加するためのチェックボックスを加える。
+*/
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  getDocs,
+  getDoc,
+} from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
 import { nanoid } from "nanoid"; // 短いユニークID生成用
 import { Editor } from "@toast-ui/react-editor";
@@ -24,20 +36,35 @@ interface UserData {
 }
 
 const AddArticle: React.FC = () => {
+  // タイトル
   const [title, setTitle] = useState<string>("");
-  const [userId, setUserId] = useState<string | null>(null); // ユーザーIDを保持するステート
-  const [userAvatar, setUserAvatar] = useState<string | null>(null); // ユーザーのアバターURLを保持するステート
+  // ユーザーIDとアバターURLを保持
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  // toast-ui Editor の参照
   const editorRef = useRef<Editor>(null);
+
+  // 画面遷移用
   const navigate = useNavigate();
   const auth = getAuth();
 
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false); // ダークモードの状態を管理
+  // ダークモードの状態を管理
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
-  const [allUsers, setAllUsers] = useState<UserData[]>([]); // 全ユーザーのリスト
-  const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]); // 選択された編集者
+  // 全ユーザーのリスト, 選択された編集者, 編集者検索用
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
+  const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
+  const [editorSearch, setEditorSearch] = useState<string>("");
 
-  const [editorSearch, setEditorSearch] = useState<string>(""); // 編集者検索用のステート
+  // ======== 追加: Discordに紹介するかどうかのチェックボックス状態 ========
+  // 紹介する場合は "discord" フィールドを false にするロジック。
+  // （例：チェック = true => discord: false）
+  const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
 
+  // --------------------------------------------
+  // ダークモードの変更を監視する useEffect
+  // --------------------------------------------
   useEffect(() => {
     // 初期のダークモード状態を設定
     const checkDarkMode = () => {
@@ -67,8 +94,10 @@ const AddArticle: React.FC = () => {
     };
   }, []);
 
+  // --------------------------------------------
+  // FirebaseAuthのユーザーログイン状態を監視
+  // --------------------------------------------
   useEffect(() => {
-    // 認証状態の監視
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
         // ユーザーがログインしている場合、UIDとアバターURLを取得
@@ -80,13 +109,13 @@ const AddArticle: React.FC = () => {
         setUserAvatar(null);
       }
     });
-
-    // クリーンアップ関数
     return () => unsubscribe();
   }, [auth]);
 
+  // --------------------------------------------
+  // Firestoreの users コレクションから全ユーザーを取得
+  // --------------------------------------------
   useEffect(() => {
-    // 全ユーザーをFirestoreから取得
     const fetchUsers = async () => {
       try {
         const usersCol = collection(db, "users");
@@ -105,6 +134,9 @@ const AddArticle: React.FC = () => {
     fetchUsers();
   }, []);
 
+  // --------------------------------------------
+  // 編集者を追加する
+  // --------------------------------------------
   const handleAddEditor = (user: UserData) => {
     // 既に選択されている場合は追加しない
     if (selectedEditors.find((editor) => editor.uid === user.uid)) {
@@ -114,10 +146,16 @@ const AddArticle: React.FC = () => {
     setEditorSearch("");
   };
 
+  // --------------------------------------------
+  // 選択された編集者を削除する
+  // --------------------------------------------
   const handleRemoveEditor = (uid: string) => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
+  // --------------------------------------------
+  // フォームの送信処理
+  // --------------------------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -125,25 +163,33 @@ const AddArticle: React.FC = () => {
       const editorInstance = editorRef.current?.getInstance();
       let markdownContent = editorInstance?.getMarkdown() || "";
 
-      // 投稿時に画像を処理
+      // 投稿時に画像を処理（Base64画像 → GitHubアップロード）
       markdownContent = await processMarkdownContent(markdownContent);
 
       // Firestoreに保存
       const articleId = nanoid(10); // ユニークな記事IDを生成
       const articleRef = doc(db, "articles", articleId);
+
+      // チェックボックスが true なら discord フィールドは false, チェックが false なら discord は true
+      // 「紹介するなら discord を false」という要望に対応
+      const discordValue = introduceDiscord ? false : true;
+
       await setDoc(articleRef, {
         title,
         content: markdownContent,
         created_at: serverTimestamp(),
         authorId: userId, // 正しいユーザーIDを設定
         authorAvatarUrl: userAvatar,
-        editors: selectedEditors.map((editor) => editor.uid), // 編集者のUIDを保存
+        editors: selectedEditors.map((editor) => editor.uid),
+        // ======== 追加: discord フィールド（Boolean） ========
+        discord: discordValue,
       });
 
       alert("記事を追加しました！");
       setTitle("");
       editorInstance?.setMarkdown("");
-      setSelectedEditors([]); // 編集者の選択をリセット
+      setSelectedEditors([]);
+      setIntroduceDiscord(false); // チェックボックスのリセット
       navigate("/"); // 投稿後にリダイレクト
     } catch (error) {
       console.error("エラー:", error);
@@ -151,15 +197,16 @@ const AddArticle: React.FC = () => {
     }
   };
 
+  // --------------------------------------------
+  // Markdownに含まれるBase64画像をGitHubにアップロード
+  // --------------------------------------------
   /**
    * Markdownコンテンツ内のBase64画像を検出し、GitHubにアップロードしてURLを置換する
    *
    * @param {string} markdown - 元のMarkdownコンテンツ
    * @returns {string} - 画像URLが置換されたMarkdownコンテンツ
    */
-  const processMarkdownContent = async (
-    markdown: string
-  ): Promise<string> => {
+  const processMarkdownContent = async (markdown: string): Promise<string> => {
     // Base64形式の画像を検出する正規表現
     const base64ImageRegex =
       /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
@@ -172,23 +219,24 @@ const AddArticle: React.FC = () => {
 
     let match;
     while ((match = base64ImageRegex.exec(markdown)) !== null) {
-      const [fullMatch, /* altText */, dataUrl, base64Data] = match;
+      const [
+        fullMatch,
+        /* altText */,
+        dataUrl,
+        base64Data,
+      ] = match;
 
       // 同じ画像を複数回アップロードしないようにする
       if (base64ToGitHubURLMap[dataUrl]) {
         continue;
       }
 
-      // Capture variables to avoid referencing 'match' directly
-      const currentFullMatch = fullMatch;
-      const currentBase64Data = base64Data;
-
       // 画像をアップロードするプロミスを作成
       const uploadPromise = (async () => {
         try {
           const imageUrl = await uploadBase64ImageToGitHub(
-            currentBase64Data,
-            currentFullMatch
+            base64Data,
+            fullMatch
           );
           base64ToGitHubURLMap[dataUrl] = imageUrl;
         } catch (error) {
@@ -208,7 +256,7 @@ const AddArticle: React.FC = () => {
     // Markdownコンテンツ内のBase64画像URLをGitHubのURLに置換
     const updatedMarkdown = markdown.replace(
       base64ImageRegex,
-      (match, alt, dataUrl, base64Data) => {
+      (match, alt, dataUrl) => {
         const githubUrl = base64ToGitHubURLMap[dataUrl];
         if (githubUrl) {
           return `![${alt}](${githubUrl})`;
@@ -221,11 +269,14 @@ const AddArticle: React.FC = () => {
     return updatedMarkdown;
   };
 
+  // --------------------------------------------
+  // Firestore から GitHubトークン を取得
+  // --------------------------------------------
   async function fetchGithubToken() {
     try {
       const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG"); // 正しいドキュメントIDを指定
       const docSnap = await getDoc(docRef);
-  
+
       if (docSnap.exists()) {
         const data = docSnap.data();
         return data.key; // "key" フィールドの値を返す
@@ -239,6 +290,9 @@ const AddArticle: React.FC = () => {
     }
   }
 
+  // --------------------------------------------
+  // GitHubにBase64画像をアップロード
+  // --------------------------------------------
   /**
    * Base64形式の画像データをGitHubにアップロードし、URLを返す
    *
@@ -295,6 +349,9 @@ const AddArticle: React.FC = () => {
     return imageUrl;
   };
 
+  // --------------------------------------------
+  // コンポーネントの描画
+  // --------------------------------------------
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
@@ -318,6 +375,23 @@ const AddArticle: React.FC = () => {
             required
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+        </div>
+
+        {/* Discordに紹介するかどうかのチェックボックス */}
+        <div className="form-group">
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">
+            Discordに紹介する
+            {/* チェック → discord: false になるロジック */}
+            <input
+              type="checkbox"
+              className="ml-2"
+              checked={introduceDiscord}
+              onChange={(e) => setIntroduceDiscord(e.target.checked)}
+            />
+          </label>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            チェックを入れると firestore の「discord」フィールドが false で投稿されます。
+          </p>
         </div>
 
         {/* 編集者追加 */}
