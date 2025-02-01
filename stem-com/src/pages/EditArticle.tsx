@@ -35,29 +35,36 @@ interface Article {
   editors?: string[]; // 編集者のUIDの配列
 }
 
+/**
+ * 記事編集画面のコンポーネント
+ */
 const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [article, setArticle] = useState<Article | null>(null);
   const [title, setTitle] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null); // ユーザーIDを保持するステート
+  const [userAvatar, setUserAvatar] = useState<string | null>(null); // ユーザーのアバターURLを保持するステート
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false); // ダークモードかどうかを判定するステート
   const editorRef = useRef<Editor>(null);
   const navigate = useNavigate();
   const auth = getAuth();
 
-  // Removed unused variables
-  // const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [allUsers, setAllUsers] = useState<UserData[]>([]); // 全ユーザーのリスト
-  const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]); // 選択された編集者
-  const [editorSearch, setEditorSearch] = useState<string>(""); // 編集者検索用のステート
+  // 全ユーザーのリスト
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
+  // 選択された編集者
+  const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
+  // 編集者検索用のステート
+  const [editorSearch, setEditorSearch] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 認証状態の監視
   useEffect(() => {
-    // 認証状態の監視
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
-        setUserAvatar(user.photoURL || null); // Ensure userAvatar is used or remove it
+        // ユーザーのアバターURLをセット（なければ null）
+        setUserAvatar(user.photoURL || null);
       } else {
         setUserId(null);
         setUserAvatar(null);
@@ -67,6 +74,13 @@ const EditArticle: React.FC = () => {
     return () => unsubscribe();
   }, [auth]);
 
+  // ローカルストレージなどからテーマ情報を取得して isDarkMode を設定
+  useEffect(() => {
+    const theme = localStorage.getItem("theme");
+    setIsDarkMode(theme === "dark");
+  }, []);
+
+  // 編集対象の記事を取得するエフェクト
   useEffect(() => {
     const fetchArticle = async () => {
       if (!id) {
@@ -75,7 +89,7 @@ const EditArticle: React.FC = () => {
       }
 
       try {
-        // 記事を取得
+        // Firestore から記事を取得
         const docRef = doc(db, "articles", id);
         const docSnap = await getDoc(docRef);
 
@@ -127,8 +141,8 @@ const EditArticle: React.FC = () => {
     fetchArticle();
   }, [id, navigate]);
 
+  // Firestore から全ユーザーを取得するエフェクト
   useEffect(() => {
-    // 全ユーザーをFirestoreから取得
     const fetchUsers = async () => {
       try {
         const usersCol = collection(db, "users");
@@ -147,6 +161,10 @@ const EditArticle: React.FC = () => {
     fetchUsers();
   }, []);
 
+  /**
+   * 編集者を追加するハンドラー
+   * @param user 追加するユーザーデータ
+   */
   const handleAddEditor = (user: UserData) => {
     // 既に選択されている場合は追加しない
     if (selectedEditors.find((editor) => editor.uid === user.uid)) {
@@ -156,10 +174,18 @@ const EditArticle: React.FC = () => {
     setEditorSearch("");
   };
 
+  /**
+   * 編集者を削除するハンドラー
+   * @param uid 削除する編集者のUID
+   */
   const handleRemoveEditor = (uid: string) => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
+  /**
+   * 記事更新時のフォーム送信ハンドラー
+   * @param e フォームイベント
+   */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -175,7 +201,7 @@ const EditArticle: React.FC = () => {
       // 投稿時に画像を処理
       markdownContent = await processMarkdownContent(markdownContent);
 
-      // Firestoreに更新
+      // Firestoreに記事を更新
       const articleRef = doc(db, "articles", article.id);
       await setDoc(articleRef, {
         title,
@@ -195,8 +221,8 @@ const EditArticle: React.FC = () => {
   /**
    * Markdownコンテンツ内のBase64画像を検出し、GitHubにアップロードしてURLを置換する
    *
-   * @param {string} markdown - 元のMarkdownコンテンツ
-   * @returns {string} - 画像URLが置換されたMarkdownコンテンツ
+   * @param markdown 元のMarkdownコンテンツ
+   * @returns 画像URLが置換されたMarkdownコンテンツ
    */
   const processMarkdownContent = async (
     markdown: string
@@ -247,9 +273,9 @@ const EditArticle: React.FC = () => {
   /**
    * Base64形式の画像データをGitHubにアップロードし、URLを返す
    *
-   * @param {string} base64Data - Base64形式の画像データ
-   * @param {string} originalMatch - 元のMarkdown画像マッチ
-   * @returns {string} - GitHubにアップロードされた画像のURL
+   * @param base64Data Base64形式の画像データ
+   * @param originalMatch 元のMarkdown画像マッチ
+   * @returns GitHubにアップロードされた画像のURL
    */
   const uploadBase64ImageToGitHub = async (
     base64Data: string,
@@ -280,6 +306,7 @@ const EditArticle: React.FC = () => {
       content: base64Data,
     };
 
+    // GitHubトークンを取得するための内部関数
     async function fetchGithubToken() {
       try {
         const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG"); // 正しいドキュメントIDを指定
