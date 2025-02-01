@@ -43,8 +43,8 @@ const EditArticle: React.FC = () => {
   const [article, setArticle] = useState<Article | null>(null);
   const [title, setTitle] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null); // ユーザーIDを保持するステート
-  const [userAvatar, setUserAvatar] = useState<string | null>(null); // ユーザーのアバターURLを保持するステート
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false); // ダークモードかどうかを判定するステート
+  // ダークモードかどうかを判定するステート
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const editorRef = useRef<Editor>(null);
   const navigate = useNavigate();
   const auth = getAuth();
@@ -63,11 +63,9 @@ const EditArticle: React.FC = () => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
-        // ユーザーのアバターURLをセット（なければ null）
-        setUserAvatar(user.photoURL || null);
+        // userAvatarは使用していないので削除
       } else {
         setUserId(null);
-        setUserAvatar(null);
       }
     });
 
@@ -203,12 +201,16 @@ const EditArticle: React.FC = () => {
 
       // Firestoreに記事を更新
       const articleRef = doc(db, "articles", article.id);
-      await setDoc(articleRef, {
-        title,
-        content: markdownContent,
-        updated_at: serverTimestamp(),
-        editors: selectedEditors.map((editor) => editor.uid), // 編集者のUIDを保存
-      }, { merge: true });
+      await setDoc(
+        articleRef,
+        {
+          title,
+          content: markdownContent,
+          updated_at: serverTimestamp(),
+          editors: selectedEditors.map((editor) => editor.uid), // 編集者のUIDを保存
+        },
+        { merge: true }
+      );
 
       alert("記事を更新しました！");
       navigate(`/articles/${article.id}`);
@@ -235,17 +237,17 @@ const EditArticle: React.FC = () => {
 
     const matches = Array.from(markdown.matchAll(base64ImageRegex));
 
-    matches.forEach(match => {
+    matches.forEach((match) => {
       const dataUrl = match[2];
       const base64Data = match[3];
 
       if (!base64ToGitHubURLMap[dataUrl]) {
         uploadPromises.push(
           uploadBase64ImageToGitHub(base64Data, match[0])
-            .then(imageUrl => {
+            .then((imageUrl) => {
               base64ToGitHubURLMap[dataUrl] = imageUrl;
             })
-            .catch(error => {
+            .catch((error) => {
               console.error("画像のアップロードに失敗しました:", error);
               alert("画像のアップロードに失敗しました。");
               throw error;
@@ -285,9 +287,7 @@ const EditArticle: React.FC = () => {
     const GITHUB_TOKEN = await fetchGithubToken();
 
     // 画像の種類を判別
-    const imageTypeMatch = originalMatch.match(
-      /data:image\/([a-zA-Z]+);base64,/
-    );
+    const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png"; // デフォルトはPNG
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
@@ -311,7 +311,7 @@ const EditArticle: React.FC = () => {
       try {
         const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG"); // 正しいドキュメントIDを指定
         const docSnap = await getDoc(docRef);
-    
+
         if (docSnap.exists()) {
           const data = docSnap.data();
           return data.key; // "key" フィールドの値を返す
@@ -369,10 +369,7 @@ const EditArticle: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label
-            htmlFor="title"
-            className="block text-gray-700 dark:text-gray-300"
-          >
+          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
             タイトル
           </label>
           <input
@@ -404,9 +401,7 @@ const EditArticle: React.FC = () => {
               {allUsers
                 .filter(
                   (user) =>
-                    user.displayName
-                      .toLowerCase()
-                      .includes(editorSearch.toLowerCase()) &&
+                    user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
                     user.uid !== userId && // 自分自身を除外
                     !selectedEditors.find((editor) => editor.uid === user.uid) // 既に選択されている編集者を除外
                 )
@@ -430,9 +425,7 @@ const EditArticle: React.FC = () => {
                 ))}
               {allUsers.filter(
                 (user) =>
-                  user.displayName
-                    .toLowerCase()
-                    .includes(editorSearch.toLowerCase()) &&
+                  user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
                   user.uid !== userId &&
                   !selectedEditors.find((editor) => editor.uid === user.uid)
               ).length === 0 && (
@@ -481,10 +474,7 @@ const EditArticle: React.FC = () => {
 
         {/* コンテンツ入力 */}
         <div className="form-group">
-          <label
-            htmlFor="content"
-            className="block text-gray-700 dark:text-gray-300"
-          >
+          <label htmlFor="content" className="block text-gray-700 dark:text-gray-300">
             内容 (Markdown)
           </label>
           <Editor
