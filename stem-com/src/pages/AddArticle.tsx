@@ -14,9 +14,9 @@ import { nanoid } from "nanoid"; // 短いユニークID生成用ライブラリ
 import { useNavigate } from "react-router-dom";
 // Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-// Markdownのリアルタイムプレビュー用ライブラリ
+// Markdown のリアルタイムプレビュー用ライブラリ
 import ReactMarkdown from "react-markdown";
-// カスタムCSSのインポート
+// カスタムCSS のインポート
 import "../AddArticle.css";
 
 // ユーザー情報の型定義
@@ -28,10 +28,10 @@ interface UserData {
 
 /**
  * 記事投稿用コンポーネント
- * ・タイトル、内容、編集者、Discord紹介チェックボックスを扱う
- * ・GUIのマークダウンエディタ（画面左：入力、右：プレビュー）を実装
- * ・画像追加ボタンでモーダルを表示し、画像ファイルをBase64形式に変換してマークダウンに挿入
- * ・投稿時は、Base64画像をGitHubにアップロードしてURLに置換する
+ * ・タイトル、内容、編集者、Discord 紹介チェックボックスを扱う
+ * ・GUI のマークダウンエディタ（画面左：入力、右：プレビュー）を実装
+ * ・画像追加ボタンでモーダルを表示し、画像ファイルを Base64 形式に変換してマークダウンに挿入
+ * ・投稿時は、Base64 画像を GitHub にアップロードして URL に置換する
  */
 const AddArticle: React.FC = () => {
   // ----------------------------
@@ -41,14 +41,14 @@ const AddArticle: React.FC = () => {
   const [title, setTitle] = useState<string>("");
   // マークダウンコンテンツ（エディタの入力値）
   const [markdownContent, setMarkdownContent] = useState<string>("");
-  // ログインユーザーのUIDとアバターURL
+  // ログインユーザーの UID とアバター URL
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   // 編集者候補および選択された編集者の管理
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-  // Discord紹介チェックボックス（チェックの場合、Firestoreの「discord」フィールドは false）
+  // Discord 紹介チェックボックス（チェックの場合、Firestore の「discord」フィールドは false）
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   // 画像アップロード用モーダルの表示状態と、モーダル内で選択された画像ファイル
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
@@ -56,7 +56,7 @@ const AddArticle: React.FC = () => {
 
   // 画面遷移用
   const navigate = useNavigate();
-  // Firebase認証インスタンスの取得
+  // Firebase 認証インスタンスの取得
   const auth = getAuth();
 
   // ----------------------------
@@ -65,7 +65,7 @@ const AddArticle: React.FC = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
-        // ログインしている場合、UIDとアバターURLを状態に保存
+        // ログインしている場合、UID とアバター URL を状態に保存
         setUserId(user.uid);
         setUserAvatar(user.photoURL || null);
       } else {
@@ -126,11 +126,11 @@ const AddArticle: React.FC = () => {
     }
 
     const reader = new FileReader();
-    // 画像ファイルをBase64形式に変換
+    // 画像ファイルを Base64 形式に変換
     reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
       const result = reader.result as string;
-      // マークダウン形式の画像挿入文を作成（altテキストは「画像」としている）
+      // マークダウン形式の画像挿入文を作成（alt テキストは「画像」としている）
       const imageMarkdown = `\n![画像](${result})\n`;
       // 既存のマークダウンコンテンツに追記
       setMarkdownContent((prev) => prev + imageMarkdown);
@@ -151,22 +151,22 @@ const AddArticle: React.FC = () => {
 
     try {
       let content = markdownContent;
-      // 投稿時に、Markdown内のBase64画像をGitHubにアップロードしてURLに置換する
+      // 投稿時に、Markdown 内の Base64 画像を GitHub にアップロードして URL に置換する
       content = await processMarkdownContent(content);
 
-      // ユニークな記事IDを生成し、Firestoreの記事ドキュメントを作成
+      // ユニークな記事IDを生成し、Firestore の記事ドキュメントを作成
       const articleId = nanoid(10);
       const articleRef = doc(db, "articles", articleId);
 
-      // Discord紹介チェックボックスの値（チェックの場合、discord: false）
+      // Discord 紹介チェックボックスの値（チェックの場合、discord: false）
       const discordValue = introduceDiscord ? false : true;
 
-      // Firestoreに記事情報を保存
+      // Firestore に記事情報を保存
       await setDoc(articleRef, {
         title,
         content,
         created_at: serverTimestamp(),
-        authorId: userId, // ログインユーザーのUID
+        authorId: userId, // ログインユーザーの UID
         authorAvatarUrl: userAvatar,
         editors: selectedEditors.map((editor) => editor.uid),
         // 追加: discord フィールド（Boolean）
@@ -187,21 +187,21 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // Markdown内のBase64画像をGitHubにアップロードしてURLに置換する処理
+  // Markdown 内の Base64 画像を GitHub にアップロードして URL に置換する処理
   // ----------------------------
   /**
-   * Markdownコンテンツ内のBase64画像を検出し、GitHubにアップロード後にURLを置換する
+   * Markdown コンテンツ内の Base64 画像を検出し、GitHub にアップロード後に URL を置換する
    *
-   * @param markdown - 元のMarkdownコンテンツ
-   * @returns {Promise<string>} - 画像URLが置換されたMarkdownコンテンツ
+   * @param markdown - 元の Markdown コンテンツ
+   * @returns {Promise<string>} - 画像 URL が置換された Markdown コンテンツ
    */
   const processMarkdownContent = async (markdown: string): Promise<string> => {
-    // Base64画像を検出する正規表現
+    // Base64 画像を検出する正規表現
     const base64ImageRegex =
       /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
     // 画像アップロード処理のプロミスを格納する配列
     const uploadPromises: Promise<void>[] = [];
-    // Base64画像URLとGitHubアップロード後のURLのマッピング
+    // Base64 画像 URL と GitHub アップロード後の URL のマッピング
     const base64ToGitHubURLMap: { [key: string]: string } = {};
 
     let match;
@@ -231,7 +231,7 @@ const AddArticle: React.FC = () => {
     // すべての画像アップロードが完了するまで待機
     await Promise.all(uploadPromises);
 
-    // Markdown内のBase64画像をGitHubのURLに置換
+    // Markdown 内の Base64 画像を GitHub の URL に置換
     const updatedMarkdown = markdown.replace(
       base64ImageRegex,
       (match, alt, dataUrl) => {
@@ -244,7 +244,7 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // FirestoreからGitHubトークンを取得する処理
+  // Firestore から GitHub トークンを取得する処理
   // ----------------------------
   async function fetchGithubToken() {
     try {
@@ -265,14 +265,14 @@ const AddArticle: React.FC = () => {
   }
 
   // ----------------------------
-  // GitHubにBase64画像をアップロードする処理
+  // GitHub に Base64 画像をアップロードする処理
   // ----------------------------
   /**
-   * Base64形式の画像データをGitHubにアップロードし、画像URLを返す
+   * Base64 形式の画像データを GitHub にアップロードし、画像 URL を返す
    *
-   * @param base64Data - Base64形式の画像データ
-   * @param originalMatch - 元のMarkdown画像記法
-   * @returns {Promise<string>} - GitHubにアップロードされた画像のURL
+   * @param base64Data - Base64 形式の画像データ
+   * @param originalMatch - 元の Markdown 画像記法
+   * @returns {Promise<string>} - GitHub にアップロードされた画像の URL
    */
   const uploadBase64ImageToGitHub = async (
     base64Data: string,
@@ -294,7 +294,7 @@ const AddArticle: React.FC = () => {
     const fileName = `${id}.${imageType}`;
     const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
 
-    // GitHubにアップロードするためのリクエストペイロード
+    // GitHub にアップロードするためのリクエストペイロード
     const payload = {
       message: `Add image: ${fileName}`,
       content: base64Data,
@@ -315,7 +315,7 @@ const AddArticle: React.FC = () => {
       throw new Error(error.message);
     }
 
-    // GitHub上の画像URLを構築して返す
+    // GitHub 上の画像 URL を構築して返す
     const imageUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     return imageUrl;
   };
@@ -345,7 +345,7 @@ const AddArticle: React.FC = () => {
           />
         </div>
 
-        {/* Discord紹介チェックボックス */}
+        {/* Discord 紹介チェックボックス */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
@@ -453,7 +453,7 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* GUIマークダウンエディタ（左：入力、右：プレビュー） */}
+        {/* GUI マークダウンエディタ（左：入力、右：プレビュー） */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             内容 (Markdown)
@@ -477,7 +477,11 @@ const AddArticle: React.FC = () => {
             </div>
             {/* 右側：マークダウンプレビュー */}
             <div className="w-full md:w-1/2 h-80 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
-              <ReactMarkdown>{markdownContent}</ReactMarkdown>
+              {markdownContent.trim() ? (
+                <ReactMarkdown>{markdownContent}</ReactMarkdown>
+              ) : (
+                <p className="text-gray-500">プレビューがここに表示されます</p>
+              )}
             </div>
           </div>
         </div>
