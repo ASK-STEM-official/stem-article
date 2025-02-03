@@ -1,6 +1,7 @@
 // src/App.tsx
 // このファイルはReactアプリケーションのエントリーポイントです。
 // GitHubログインによる認証と指定した組織チェックを行った後、Firestoreにユーザーデータを保存・取得します。
+// また、firebaseのログインキャッシュを利用して自動ログインを実現しています。
 
 import React, { useState, useEffect } from "react";
 import {
@@ -11,10 +12,13 @@ import {
 } from "react-router-dom"; // HashRouter をインポート
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   signInWithPopup,
   GithubAuthProvider,
   signOut,
-} from "firebase/auth";
+  onAuthStateChanged,
+} from "firebase/auth"; // Firebase Authentication用の関数をインポート
 import {
   getFirestore,
   doc,
@@ -38,12 +42,15 @@ interface UserData {
 }
 
 const App = () => {
-  // user にはFirestoreから取得したユーザーデータを保持する
+  // Firestoreから取得したユーザーデータを保持するstate
   const [user, setUser] = useState<UserData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // ダークモード管理用の state
   const [darkMode, setDarkMode] = useState<boolean>(false);
+
+  // 認証状態の初期化中フラグ（firebaseの自動ログイン確認中に利用）
+  const [initializing, setInitializing] = useState<boolean>(true);
 
   // 初回マウント時にOSのダークモード設定を反映させる
   useEffect(() => {
@@ -57,6 +64,25 @@ const App = () => {
   }, []);
 
   /**
+   * firebaseの認証キャッシュを利用した自動ログイン処理
+   * onAuthStateChangedで認証状態の変化を監視し、ログイン済みの場合はFirestoreからユーザーデータを取得します。
+   */
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // 既にログイン済みの場合、Firestoreからユーザーデータを取得して状態を更新
+        const userData = await fetchUserData(firebaseUser.uid);
+        if (userData) {
+          setUser(userData);
+        }
+      }
+      setInitializing(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  /**
    * GitHub認証ボタンを押下した際のイベントハンドラ。
    * Firebase Authの signInWithPopup を使ってGitHubログインを行い、
    * ログイン後に取得したトークンで組織所属を確認します。
@@ -65,6 +91,9 @@ const App = () => {
   const handleGitHubLogin = async () => {
     try {
       const auth = getAuth();
+      // firebaseの認証キャッシュ（local persistence）を明示的に設定
+      await setPersistence(auth, browserLocalPersistence);
+
       const provider = new GithubAuthProvider();
 
       // 組織の情報を取得するために "read:org" スコープを追加
@@ -103,7 +132,7 @@ const App = () => {
         // Firestore にユーザー情報を保存（初回のみ）
         await saveUserData(result.user, token);
 
-        // Firestore からユーザーデータを取得して setUser
+        // Firestore からユーザーデータを取得して状態を更新
         const userData = await fetchUserData(result.user.uid);
         setUser(userData);
       } else {
@@ -189,7 +218,7 @@ const App = () => {
   };
 
   /**
-   * ログアウトを行う。
+   * ログアウトを行う関数。
    */
   const handleLogout = async () => {
     const auth = getAuth();
@@ -202,7 +231,7 @@ const App = () => {
   };
 
   /**
-   * ダークモードの切り替え。
+   * ダークモードの切り替え関数。
    */
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -212,6 +241,15 @@ const App = () => {
       document.documentElement.classList.remove("dark");
     }
   };
+
+  // 認証状態の初期化中はローディング表示を行う
+  if (initializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   /**
    * ログインしていない場合は、GitHubログインボタンのみ表示する。
