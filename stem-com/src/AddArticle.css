@@ -1,44 +1,15 @@
-/*
-.dark .toastui-editor-contents {
-    color: #e5e7eb;
-    background-color: #1f2937;
-  }
-  
+/* 必要最低限の toastui-editor コンテンツ領域用スタイル */
 
-  .dark .toastui-editor-defaultUI {
-    background-color: #1f2937; 
-  }
-  
-  .dark .toastui-editor-toolbar {
-    background-color: #374151;
-  }
-  
-  .dark .toastui-editor-toolbar .toastui-editor-toolbar-icons {
-    color: #e5e7eb;
-  }
-  .dark .toastui-editor-md-container {
-    background-color: #1f2937;
-    color: #e5e7eb; 
-  }
-  .light .toastui-editor-contents {
-    color: #1f2937;
-    background-color: #ffffff;
-  }
-  
-  .light .toastui-editor-defaultUI {
-    background-color: #ffffff;
-  }
-  
-  .light .toastui-editor-toolbar {
-    background-color: #f3f4f6;
-  }
-  
-  .light .toastui-editor-toolbar .toastui-editor-toolbar-icons {
-    color: #1f2937;
-  }
-  
-  .light .toastui-editor-md-container {
-    background-color: #ffffff;
-    color: #1f2937;
-  }
-  */
+/* ダークモード用 */
+.dark .toastui-editor-contents,
+.dark .toastui-editor-md-container {
+  color: #e5e7eb;          /* 文字色 */
+  background-color: #1f2937;  /* 背景色 */
+}
+
+/* ライトモード用 */
+.light .toastui-editor-contents,
+.light .toastui-editor-md-container {
+  color: #1f2937;          /* 文字色 */
+  background-color: #ffffff;  /* 背景色 */
+}
