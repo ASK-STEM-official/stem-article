@@ -2,7 +2,8 @@
 // このファイルは記事投稿用コンポーネントです。
 // ツールバー付きのオリジナル Markdown エディタを実装しており、
 // 左側に入力エリア（ツールバー＋テキストエリア）、右側にリアルタイムプレビューを表示します。
-// 画像追加ボタンでは画像ファイルを Base64 形式に変換し、投稿時は GitHub にアップロードして URL に置換します。
+// 画像追加ボタンでは、画像ファイルを Base64 形式に変換した上で、テキストエリアには短いプレースホルダー（例："temp://ID"）を挿入し、
+// プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します。
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
@@ -51,13 +52,17 @@ const AddArticle: React.FC = () => {
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  // 画像のプレースホルダーと Base64 データの対応マッピング
+  const [imageMapping, setImageMapping] = useState<{
+    [key: string]: { base64: string; filename: string };
+  }>({});
 
   // 画面遷移用
   const navigate = useNavigate();
   // Firebase 認証インスタンスの取得
   const auth = getAuth();
 
-  // テキストエリアの参照を作成（カーソル位置取得・操作に利用）
+  // テキストエリアの参照（カーソル位置の取得・操作に利用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -147,9 +152,14 @@ const AddArticle: React.FC = () => {
     reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
       const result = reader.result as string;
-      // 画像の Markdown 記法を作成してテキストエリアに追記
-      const imageMarkdown = `\n![画像](${result})\n`;
+      // プレースホルダー用の短い ID を生成
+      const id = nanoid(6);
+      const placeholderUrl = `temp://${id}`;
+      // テキストエリアには「画像: ファイル名」を示すプレースホルダーを挿入
+      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholderUrl})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
+      // 画像の Base64 データとファイル名を mapping に登録
+      setImageMapping((prev) => ({ ...prev, [id]: { base64: result, filename: selectedImageFile.name } }));
       setShowImageModal(false);
       setSelectedImageFile(null);
     };
@@ -159,42 +169,45 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // Markdown 内の Base64 画像を GitHub にアップロードして URL に置換する処理
+  // Markdown 内のプレースホルダー画像を GitHub にアップロードして URL に置換する処理
   // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
-    const base64ImageRegex = /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
+    // プレースホルダー形式： temp://ID
+    const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
-    const base64ToGitHubURLMap: { [key: string]: string } = {};
+    const placeholderToURL: { [key: string]: string } = {};
 
     let match;
-    while ((match = base64ImageRegex.exec(markdown)) !== null) {
-      const [fullMatch, , dataUrl, base64Data] = match;
-      if (base64ToGitHubURLMap[dataUrl]) continue;
-
+    while ((match = placeholderRegex.exec(markdown)) !== null) {
+      const [fullMatch, altText, placeholder, id] = match;
+      if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
-        try {
-          const imageUrl = await uploadBase64ImageToGitHub(base64Data, fullMatch);
-          base64ToGitHubURLMap[dataUrl] = imageUrl;
-        } catch (error) {
-          console.error("画像のアップロードに失敗しました:", error);
-          alert("画像のアップロードに失敗しました。");
-          throw error;
+        if (imageMapping[id]) {
+          try {
+            // 画像タイプはファイル名の拡張子から推測（なければ png とする）
+            const extMatch = imageMapping[id].filename.match(/\.([a-zA-Z0-9]+)$/);
+            const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
+            // ダミーの originalMatch を作成（uploadBase64ImageToGitHub 内で画像タイプ判定用）
+            const dummyOriginalMatch = `data:image/${imageType};base64,`;
+            const imageUrl = await uploadBase64ImageToGitHub(imageMapping[id].base64, dummyOriginalMatch);
+            placeholderToURL[placeholder] = imageUrl;
+          } catch (error) {
+            console.error("画像のアップロードに失敗しました:", error);
+            throw error;
+          }
         }
       })();
-
       uploadPromises.push(uploadPromise);
     }
-
     await Promise.all(uploadPromises);
 
     const updatedMarkdown = markdown.replace(
-      base64ImageRegex,
-      (match, alt, dataUrl) => {
-        const githubUrl = base64ToGitHubURLMap[dataUrl];
-        return githubUrl ? `![${alt}](${githubUrl})` : match;
+      placeholderRegex,
+      (match, altText, placeholder, id) => {
+        const url = placeholderToURL[placeholder];
+        return url ? `![${altText}](${url})` : match;
       }
     );
-
     return updatedMarkdown;
   };
 
@@ -262,13 +275,11 @@ const AddArticle: React.FC = () => {
     e.preventDefault();
     try {
       let content = markdownContent;
-      // Base64 画像を GitHub の URL に置換
+      // プレースホルダー画像を GitHub の URL に置換
       content = await processMarkdownContent(content);
-
       const articleId = nanoid(10);
       const articleRef = doc(db, "articles", articleId);
       const discordValue = introduceDiscord ? false : true;
-
       await setDoc(articleRef, {
         title,
         content,
@@ -278,7 +289,6 @@ const AddArticle: React.FC = () => {
         editors: selectedEditors.map((editor) => editor.uid),
         discord: discordValue,
       });
-
       alert("記事を追加しました！");
       setTitle("");
       setMarkdownContent("");
@@ -292,8 +302,7 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // 以下、オリジナル Markdown エディタ GUI の実装
-  // ツールバー付きのテキストエリアで Markdown 記法を簡単に入力できるようにしています。
+  // オリジナル Markdown エディタ GUI の描画
   // ----------------------------
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
@@ -438,14 +447,14 @@ const AddArticle: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => insertAtCursor("[リンク](http://)") }
+                  onClick={() => insertAtCursor("[リンク](http://)")}
                   className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
                 >
                   リンク
                 </button>
                 <button
                   type="button"
-                  onClick={() => insertAtCursor("``` \nコード\n```")}
+                  onClick={() => insertAtCursor("```\nコード\n```")}
                   className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
                 >
                   コードブロック
@@ -488,9 +497,25 @@ const AddArticle: React.FC = () => {
                 <div className="prose prose-indigo max-w-none dark:prose-dark">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
+                    // img 要素のカスタムレンダリング
                     components={{
+                      img: ({ node, ...props }) => {
+                        if (props.src && props.src.startsWith("temp://")) {
+                          const id = props.src.replace("temp://", "");
+                          if (imageMapping[id]) {
+                            return (
+                              <img
+                                {...props}
+                                src={imageMapping[id].base64}
+                                alt={props.alt || `画像: ${imageMapping[id].filename}`}
+                              />
+                            );
+                          }
+                        }
+                        return <img {...props} />;
+                      },
                       code({ node, inline, className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '');
+                        const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
                           <SyntaxHighlighter
                             style={vscDarkPlus}
@@ -498,7 +523,7 @@ const AddArticle: React.FC = () => {
                             PreTag="div"
                             {...props}
                           >
-                            {String(children).replace(/\n$/, '')}
+                            {String(children).replace(/\n$/, "")}
                           </SyntaxHighlighter>
                         ) : (
                           <code className={className} {...props}>
