@@ -1,4 +1,8 @@
 // src/pages/AddArticle.tsx
+// このファイルは記事投稿用コンポーネントです。
+// 入力した Markdown をリアルタイムでプレビューし、実際の記事表示画面と同じスタイルで確認できます。
+// また、画像追加ボタンで画像ファイルを Base64 形式に変換して Markdown に挿入し、投稿時は GitHub にアップロードします。
+
 import React, { useState, useEffect, FormEvent } from "react";
 // Firebase Firestore 関連のインポート
 import {
@@ -18,10 +22,13 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// HTML をそのままレンダリングするための rehype プラグイ
-import rehypeRaw from "rehype-raw";
 // カスタムCSS のインポート
 import "../AddArticle.css";
+
+// 以下、記事プレビュー部分の表示を ArticleDetail.tsx と同様にするため、
+// コードブロックのシンタックスハイライト用のコンポーネントをインポート
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 // ユーザー情報の型定義
 interface UserData {
@@ -430,15 +437,35 @@ const AddArticle: React.FC = () => {
                 画像追加
               </button>
             </div>
-            {/* 右側：マークダウンプレビュー */}
-            <div className="markdown-preview w-full md:w-1/2 h-80 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
+            {/* 右側：マークダウンプレビュー部分（ArticleDetail と同じ表示に変更） */}
+            <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeRaw]}
-                >
-                  {markdownContent}
-                </ReactMarkdown>
+                <div className="prose prose-indigo max-w-none dark:prose-dark">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code({ node, inline, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        return !inline && match ? (
+                          <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={match[1]}
+                            PreTag="div"
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, '')}
+                          </SyntaxHighlighter>
+                        ) : (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                    }}
+                  >
+                    {markdownContent}
+                  </ReactMarkdown>
+                </div>
               ) : (
                 <p className="text-gray-500">プレビューがここに表示されます</p>
               )}
