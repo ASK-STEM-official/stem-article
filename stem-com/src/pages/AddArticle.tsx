@@ -73,6 +73,13 @@ const AddArticle: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
+  // imageMapping の変更をデバッグログ出力（React DevTools でも確認可能）
+  // ----------------------------
+  useEffect(() => {
+    console.log("Debug: imageMapping updated:", imageMapping);
+  }, [imageMapping]);
+
+  // ----------------------------
   // FirebaseAuth のログイン状態監視
   // ----------------------------
   useEffect(() => {
@@ -102,6 +109,7 @@ const AddArticle: React.FC = () => {
           avatarUrl: doc.data().avatarUrl,
         }));
         setAllUsers(usersList);
+        console.log("Debug: Fetched users:", usersList);
       } catch (error) {
         console.error("ユーザーの取得に失敗:", error);
       }
@@ -163,22 +171,27 @@ const AddArticle: React.FC = () => {
     setIsUploading(true);
 
     const reader = new FileReader();
-    // FileReaderで画像ファイルを読み込み、Base64データを取得する
     reader.onload = () => {
       const base64Data = reader.result as string;
       const id = nanoid(6); // ユニークなID生成
       const placeholder = `temp://${id}`;
+      console.log("Debug: Uploaded image placeholder:", placeholder);
 
       // 改行ありのMarkdown記法で画像を挿入
       // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側でBase64画像に置換される
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
-      setMarkdownContent((prev) => prev + imageMarkdown);
+      setMarkdownContent((prev) => {
+        const newContent = prev + imageMarkdown;
+        console.log("Debug: Updated markdownContent:", newContent);
+        return newContent;
+      });
 
       // imageMapping に画像のBase64データとファイル名を登録
-      setImageMapping((prev) => ({
-        ...prev,
-        [id]: { base64: base64Data, filename: selectedImageFile.name },
-      }));
+      setImageMapping((prev) => {
+        const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
+        console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
+        return newMapping;
+      });
 
       setShowImageModal(false);
       setSelectedImageFile(null);
@@ -203,20 +216,22 @@ const AddArticle: React.FC = () => {
     while ((match = placeholderRegex.exec(markdown)) !== null) {
       // 使用しない変数は破棄するため、先頭2要素は無視する
       const [, , placeholder, id] = match;
+      console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
 
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
           try {
             const entry = imageMapping[id];
-            if (!entry) return;
-
+            if (!entry) {
+              console.log("Debug: No imageMapping entry for id:", id);
+              return;
+            }
             // 拡張子の取得
             const extMatch = entry.filename.match(/\.([a-zA-Z0-9]+)$/);
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
-
             const original = `data:image/${imageType};base64,`;
-            // GitHub へアップロードし、アップロード先のURLを取得
             const uploadedUrl = await uploadBase64ImageToGitHub(entry.base64, original);
+            console.log("Debug: Uploaded image URL for placeholder", placeholder, "->", uploadedUrl);
             placeholderToURL[placeholder] = uploadedUrl;
           } catch (err) {
             console.error("画像アップロード失敗:", err);
@@ -227,12 +242,12 @@ const AddArticle: React.FC = () => {
       }
     }
 
-    // すべての画像アップロード完了後、Markdown内のプレースホルダーをアップロード先のURLに置換する
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
       (m, altText, placeholder, id) => {
         const url = placeholderToURL[placeholder];
+        console.log("Debug: Replacing placeholder", placeholder, "with URL:", url);
         return url ? `![${altText}](${url})` : m;
       }
     );
@@ -303,8 +318,9 @@ const AddArticle: React.FC = () => {
       throw new Error(err.message);
     }
 
-    // GitHub 上の画像URLを返す
-    return `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
+    const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
+    console.log("Debug: GitHub uploaded URL:", uploadedUrl);
+    return uploadedUrl;
   };
 
   // ----------------------------
@@ -320,7 +336,6 @@ const AddArticle: React.FC = () => {
       // Markdown の画像プレースホルダーをアップロードして置換する
       content = await processMarkdownContent(content);
 
-      // Firestore に記事を追加する
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
       const discordFlag = introduceDiscord ? false : true; // 環境に合わせて
@@ -463,7 +478,7 @@ const AddArticle: React.FC = () => {
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">内容 (Markdown)</label>
           <div className="flex flex-col md:flex-row gap-4">
-            {/* 左側：テキストエリア＋ツールバー（編集用・プレーンテキスト） */}
+            {/* 左側：テキストエディア＋ツールバー（編集用・プレーンテキスト） */}
             <div className="w-full md:w-1/2">
               <div className="mb-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => insertAtCursor("# ")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
@@ -488,15 +503,16 @@ const AddArticle: React.FC = () => {
                   引用
                 </button>
               </div>
-
               <textarea
                 ref={textareaRef}
                 value={markdownContent}
-                onChange={(e) => setMarkdownContent(e.target.value)}
+                onChange={(e) => {
+                  setMarkdownContent(e.target.value);
+                  console.log("Debug: markdownContent changed:", e.target.value);
+                }}
                 placeholder="ここにMarkdownを入力"
                 className="w-full h-80 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
               />
-
               <button
                 type="button"
                 onClick={() => setShowImageModal(true)}
@@ -505,7 +521,6 @@ const AddArticle: React.FC = () => {
                 画像追加
               </button>
             </div>
-
             {/* 右側：プレビュー（Base64画像表示） */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
@@ -523,7 +538,7 @@ const AddArticle: React.FC = () => {
                         ) {
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
-                          console.log("Custom image renderer: id =", id, "mapped =", mapped);
+                          console.log("Debug: Custom image renderer - id:", id, "mapped:", mapped);
                           if (mapped) {
                             return (
                               <img
@@ -536,7 +551,6 @@ const AddArticle: React.FC = () => {
                           }
                           return <span style={{ color: "red" }}>画像読み込みエラー: {id}</span>;
                         }
-                        // 通常の画像はそのままレンダリング
                         return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
                       // コードブロックのシンタックスハイライト
@@ -563,7 +577,6 @@ const AddArticle: React.FC = () => {
             </div>
           </div>
         </div>
-
         <button
           type="submit"
           disabled={isSubmitting}
@@ -572,8 +585,6 @@ const AddArticle: React.FC = () => {
           投稿
         </button>
       </form>
-
-      {/* 画像アップロード用モーダル */}
       {showImageModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-80">
@@ -584,6 +595,7 @@ const AddArticle: React.FC = () => {
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
                   setSelectedImageFile(e.target.files[0]);
+                  console.log("Debug: Selected image file:", e.target.files[0]);
                 }
               }}
               className="mb-4"
