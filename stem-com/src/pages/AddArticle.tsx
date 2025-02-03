@@ -179,11 +179,8 @@ const AddArticle: React.FC = () => {
 
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // _altText は使用しないため、先頭の要素は fullMatch（未使用）、次に _altText（未使用）、dataUrl、base64Data ではなくプレースホルダーの ID を取得
-      const [fullMatch, altText, placeholder, id] = match;
-      // ESLint 対策：使用しない変数にはアンダースコアを付与
-      const _unusedFullMatch = fullMatch;
-      const _unusedAltText = altText;
+      // 必要な値のみ取得（先頭2要素はスキップ）
+      const [, , placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
