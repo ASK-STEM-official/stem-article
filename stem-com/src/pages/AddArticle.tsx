@@ -66,11 +66,22 @@ const AddArticle: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
+  // forceRender state を追加して再レンダリングを強制
+  const [forceRender, setForceRender] = useState<boolean>(false);
+
   const navigate = useNavigate();
   const auth = getAuth();
 
   // テキストエリア参照（Markdown入力エリア用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ----------------------------
+  // imageMapping や markdownContent の変更時に再レンダリングを強制する
+  // ----------------------------
+  useEffect(() => {
+    setForceRender((prev) => !prev);
+    console.log("Debug: forceRender toggled. Current forceRender:", forceRender);
+  }, [imageMapping, markdownContent]);
 
   // ----------------------------
   // imageMapping の変更をデバッグログ出力（React DevTools でも確認可能）
@@ -524,7 +535,10 @@ const AddArticle: React.FC = () => {
             {/* 右側：プレビュー（Base64画像表示） */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <div className="prose prose-indigo max-w-none dark:prose-dark" key={markdownContent + JSON.stringify(imageMapping)}>
+                <div
+                  className="prose prose-indigo max-w-none dark:prose-dark"
+                  key={markdownContent + JSON.stringify(imageMapping) + forceRender}
+                >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -540,6 +554,7 @@ const AddArticle: React.FC = () => {
                           const mapped = imageMapping[id];
                           console.log("Debug: Custom image renderer - id:", id, "mapped:", mapped);
                           if (mapped) {
+                            console.log("Debug: Rendering base64 image:", mapped.base64);
                             return (
                               <img
                                 {...props}
