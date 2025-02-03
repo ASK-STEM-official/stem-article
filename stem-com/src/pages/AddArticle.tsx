@@ -18,7 +18,7 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// HTML をそのままレンダリングするための rehype プラグイン（npm install rehype-raw を実施してください）
+// HTML をそのままレンダリングするための rehype プラグイ
 import rehypeRaw from "rehype-raw";
 // カスタムCSS のインポート
 import "../AddArticle.css";
