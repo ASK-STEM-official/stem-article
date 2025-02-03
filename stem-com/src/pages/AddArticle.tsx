@@ -1,9 +1,10 @@
 // src/pages/AddArticle.tsx
 // このファイルは記事投稿用コンポーネントです。
-// 入力した Markdown をリアルタイムでプレビューし、実際の記事表示画面と同じスタイルで確認できます。
-// また、画像追加ボタンで画像ファイルを Base64 形式に変換して Markdown に挿入し、投稿時は GitHub にアップロードします。
+// ツールバー付きのオリジナル Markdown エディタを実装しており、
+// 左側に入力エリア（ツールバー＋テキストエリア）、右側にリアルタイムプレビューを表示します。
+// 画像追加ボタンでは画像ファイルを Base64 形式に変換し、投稿時は GitHub にアップロードして URL に置換します。
 
-import React, { useState, useEffect, FormEvent } from "react";
+import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
 import {
   doc,
@@ -14,7 +15,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
-import { nanoid } from "nanoid"; // 短いユニークID生成用ライブラリ
+import { nanoid } from "nanoid"; // ユニークID生成用ライブラリ
 import { useNavigate } from "react-router-dom";
 // Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
@@ -22,13 +23,11 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// カスタムCSS のインポート
-import "../AddArticle.css";
-
-// 以下、記事プレビュー部分の表示を ArticleDetail.tsx と同様にするため、
-// コードブロックのシンタックスハイライト用のコンポーネントをインポート
+// コードブロックのシンタックスハイライト用コンポーネントのインポート
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+// カスタムCSS のインポート（必要に応じて編集）
+import "../AddArticle.css";
 
 // ユーザー情報の型定義
 interface UserData {
@@ -37,18 +36,12 @@ interface UserData {
   avatarUrl: string;
 }
 
-/**
- * 記事投稿用コンポーネント
- * ・タイトル、内容、編集者、Discord 紹介チェックボックスを扱う
- * ・GUI のマークダウンエディタ（画面左：入力、右：プレビュー）を実装
- * ・画像追加ボタンでモーダルを表示し、画像ファイルを Base64 形式に変換してマークダウンに挿入
- * ・投稿時は、Base64 画像を GitHub にアップロードして URL に置換する
- */
 const AddArticle: React.FC = () => {
   // ----------------------------
   // 各種状態管理
   // ----------------------------
   const [title, setTitle] = useState<string>("");
+  // Markdown の内容はテキストエリアの状態で管理
   const [markdownContent, setMarkdownContent] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
@@ -63,6 +56,9 @@ const AddArticle: React.FC = () => {
   const navigate = useNavigate();
   // Firebase 認証インスタンスの取得
   const auth = getAuth();
+
+  // テキストエリアの参照を作成（カーソル位置取得・操作に利用）
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
   // FirebaseAuth のユーザーログイン状態を監視
@@ -119,6 +115,26 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
+  // テキストエリアのカーソル位置に指定の文字列を挿入する関数
+  // ----------------------------
+  const insertAtCursor = (textToInsert: string) => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = markdownContent.substring(0, start);
+      const after = markdownContent.substring(end);
+      const newContent = before + textToInsert + after;
+      setMarkdownContent(newContent);
+      // 挿入後にカーソル位置を更新
+      setTimeout(() => {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + textToInsert.length;
+      }, 0);
+    }
+  };
+
+  // ----------------------------
   // 画像アップロードモーダル内でのアップロード処理
   // ----------------------------
   const handleUploadImage = () => {
@@ -131,6 +147,7 @@ const AddArticle: React.FC = () => {
     reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
       const result = reader.result as string;
+      // 画像の Markdown 記法を作成してテキストエリアに追記
       const imageMarkdown = `\n![画像](${result})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
       setShowImageModal(false);
@@ -142,47 +159,10 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // フォーム送信時の処理
-  // ----------------------------
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-
-    try {
-      let content = markdownContent;
-      content = await processMarkdownContent(content);
-
-      const articleId = nanoid(10);
-      const articleRef = doc(db, "articles", articleId);
-      const discordValue = introduceDiscord ? false : true;
-
-      await setDoc(articleRef, {
-        title,
-        content,
-        created_at: serverTimestamp(),
-        authorId: userId,
-        authorAvatarUrl: userAvatar,
-        editors: selectedEditors.map((editor) => editor.uid),
-        discord: discordValue,
-      });
-
-      alert("記事を追加しました！");
-      setTitle("");
-      setMarkdownContent("");
-      setSelectedEditors([]);
-      setIntroduceDiscord(false);
-      navigate("/");
-    } catch (error) {
-      console.error("エラー:", error);
-      alert("記事の投稿に失敗しました。");
-    }
-  };
-
-  // ----------------------------
   // Markdown 内の Base64 画像を GitHub にアップロードして URL に置換する処理
   // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
-    const base64ImageRegex =
-      /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
+    const base64ImageRegex = /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const base64ToGitHubURLMap: { [key: string]: string } = {};
 
@@ -225,7 +205,6 @@ const AddArticle: React.FC = () => {
     try {
       const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG");
       const docSnap = await getDoc(docRef);
-
       if (docSnap.exists()) {
         const data = docSnap.data();
         return data.key;
@@ -248,22 +227,18 @@ const AddArticle: React.FC = () => {
   ): Promise<string> => {
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
     const GITHUB_TOKEN = await fetchGithubToken();
-
     const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
     }
-
     const id = nanoid(10);
     const fileName = `${id}.${imageType}`;
     const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
-
     const payload = {
       message: `Add image: ${fileName}`,
       content: base64Data,
     };
-
     const response = await fetch(fileApiUrl, {
       method: "PUT",
       headers: {
@@ -272,30 +247,61 @@ const AddArticle: React.FC = () => {
       },
       body: JSON.stringify(payload),
     });
-
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message);
     }
-
     const imageUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     return imageUrl;
   };
 
   // ----------------------------
-  // コンポーネントの描画
+  // フォーム送信時の処理
+  // ----------------------------
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      let content = markdownContent;
+      // Base64 画像を GitHub の URL に置換
+      content = await processMarkdownContent(content);
+
+      const articleId = nanoid(10);
+      const articleRef = doc(db, "articles", articleId);
+      const discordValue = introduceDiscord ? false : true;
+
+      await setDoc(articleRef, {
+        title,
+        content,
+        created_at: serverTimestamp(),
+        authorId: userId,
+        authorAvatarUrl: userAvatar,
+        editors: selectedEditors.map((editor) => editor.uid),
+        discord: discordValue,
+      });
+
+      alert("記事を追加しました！");
+      setTitle("");
+      setMarkdownContent("");
+      setSelectedEditors([]);
+      setIntroduceDiscord(false);
+      navigate("/");
+    } catch (error) {
+      console.error("エラー:", error);
+      alert("記事の投稿に失敗しました。");
+    }
+  };
+
+  // ----------------------------
+  // 以下、オリジナル Markdown エディタ GUI の実装
+  // ツールバー付きのテキストエリアで Markdown 記法を簡単に入力できるようにしています。
   // ----------------------------
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
-        記事を追加
-      </h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
-            タイトル
-          </label>
+          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">タイトル</label>
           <input
             type="text"
             id="title"
@@ -325,9 +331,7 @@ const AddArticle: React.FC = () => {
 
         {/* 編集者追加 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            編集者を追加
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
           <input
             type="text"
             placeholder="編集者を検索"
@@ -340,9 +344,7 @@ const AddArticle: React.FC = () => {
               {allUsers
                 .filter(
                   (user) =>
-                    user.displayName
-                      .toLowerCase()
-                      .includes(editorSearch.toLowerCase()) &&
+                    user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
                     user.uid !== userId &&
                     !selectedEditors.find((editor) => editor.uid === user.uid)
                 )
@@ -358,23 +360,17 @@ const AddArticle: React.FC = () => {
                         alt={user.displayName}
                         className="w-6 h-6 rounded-full mr-2"
                       />
-                      <span className="text-gray-800 dark:text-gray-100">
-                        {user.displayName}
-                      </span>
+                      <span className="text-gray-800 dark:text-gray-100">{user.displayName}</span>
                     </div>
                   </li>
                 ))}
               {allUsers.filter(
                 (user) =>
-                  user.displayName
-                    .toLowerCase()
-                    .includes(editorSearch.toLowerCase()) &&
+                  user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
                   user.uid !== userId &&
                   !selectedEditors.find((editor) => editor.uid === user.uid)
               ).length === 0 && (
-                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">
-                  該当するユーザーが見つかりません。
-                </li>
+                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">該当するユーザーが見つかりません。</li>
               )}
             </ul>
           )}
@@ -383,9 +379,7 @@ const AddArticle: React.FC = () => {
         {/* 選択された編集者の表示 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
-            <label className="block text-gray-700 dark:text-gray-300 mb-2">
-              現在の編集者
-            </label>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
             <ul className="space-y-2">
               {selectedEditors.map((editor) => (
                 <li
@@ -398,9 +392,7 @@ const AddArticle: React.FC = () => {
                       alt={editor.displayName}
                       className="w-6 h-6 rounded-full mr-2"
                     />
-                    <span className="text-gray-800 dark:text-gray-100">
-                      {editor.displayName}
-                    </span>
+                    <span className="text-gray-800 dark:text-gray-100">{editor.displayName}</span>
                   </div>
                   <button
                     type="button"
@@ -415,20 +407,73 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* GUI マークダウンエディタ（左：入力、右：プレビュー） */}
+        {/* オリジナル Markdown エディタ GUI */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            内容 (Markdown)
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">内容 (Markdown)</label>
           <div className="flex flex-col md:flex-row gap-4">
-            {/* 左側：マークダウン入力エリアと画像追加ボタン */}
+            {/* 左側：ツールバー付き入力エリア */}
             <div className="w-full md:w-1/2">
+              {/* ツールバー */}
+              <div className="mb-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("# ")}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  見出し
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("**太字**")}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  太字
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("*斜体*")}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  斜体
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("[リンク](http://)") }
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  リンク
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("``` \nコード\n```")}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  コードブロック
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("- ")}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  リスト
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertAtCursor("> ")}
+                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
+                >
+                  引用
+                </button>
+              </div>
+              {/* テキストエリア（Markdown 入力） */}
               <textarea
+                ref={textareaRef}
                 value={markdownContent}
                 onChange={(e) => setMarkdownContent(e.target.value)}
-                placeholder="ここにMarkdownを入力"
+                placeholder="ここに Markdown を入力"
                 className="w-full h-80 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
               />
+              {/* 画像追加ボタン */}
               <button
                 type="button"
                 onClick={() => setShowImageModal(true)}
@@ -437,7 +482,7 @@ const AddArticle: React.FC = () => {
                 画像追加
               </button>
             </div>
-            {/* 右側：マークダウンプレビュー部分（ArticleDetail と同じ表示に変更） */}
+            {/* 右側：リアルタイムプレビュー */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
                 <div className="prose prose-indigo max-w-none dark:prose-dark">
@@ -486,9 +531,7 @@ const AddArticle: React.FC = () => {
       {showImageModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-80">
-            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">
-              画像をアップロード
-            </h2>
+            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">画像をアップロード</h2>
             <input
               type="file"
               accept="image/*"
