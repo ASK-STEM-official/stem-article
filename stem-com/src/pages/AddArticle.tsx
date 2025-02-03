@@ -4,7 +4,7 @@ import React, { useState, useEffect, FormEvent } from "react";
    この記事を投稿するコンポーネント。
    Firebase Firestore にタイトルや本文、編集者などを保存し、
    Base64形式の画像をGitHubにアップロードしてURL化する。
-   なお、Markdownエディタは自作し、編集タブとプレビュータブを実装しています。
+   なお、Markdownエディタは自作し、エディタとプレビューが常に並列表示されるように実装しています。
    ※画像のアップロード処理などの仕組みは変更していません。
 */
 import {
@@ -43,9 +43,6 @@ const AddArticle: React.FC = () => {
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   // 自作のMarkdownエディタの入力内容の状態管理
   const [markdownContent, setMarkdownContent] = useState<string>("ここにMarkdownを入力");
-  // 編集タブとプレビュータブの切り替え状態 ("edit" または "preview")
-  const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit");
-
   // 画面遷移用の navigate フック
   const navigate = useNavigate();
   const auth = getAuth();
@@ -62,6 +59,9 @@ const AddArticle: React.FC = () => {
   // ======== 追加: Discordに紹介するかどうかのチェックボックス状態 ========
   // チェックを入れると firestore の "discord" フィールドが false で投稿されます。
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
+
+  // 送信ボタンの連打防止用状態
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // --------------------------------------------
   // ダークモードの変更を監視する useEffect
@@ -156,7 +156,8 @@ const AddArticle: React.FC = () => {
   // --------------------------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
+    if (isSubmitting) return; // 連打防止
+    setIsSubmitting(true);
     try {
       // 自作エディタから Markdown コンテンツを取得
       let content = markdownContent;
@@ -191,6 +192,8 @@ const AddArticle: React.FC = () => {
     } catch (error) {
       console.error("エラー:", error);
       alert("記事の投稿に失敗しました。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -473,57 +476,29 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* 自作の Markdown エディタ */}
-        <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            内容 (Markdown)
-          </label>
-          {/* 編集・プレビュー切替用のタブボタン */}
-          <div className="mb-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab("edit")}
-              className={`px-4 py-2 mr-2 border rounded ${
-                activeTab === "edit" ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-700 text-gray-800"
-              }`}
-            >
-              編集
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("preview")}
-              className={`px-4 py-2 border rounded ${
-                activeTab === "preview" ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-700 text-gray-800"
-              }`}
-            >
-              プレビュー
-            </button>
-          </div>
-          {/* 編集タブ：Markdown入力用テキストエリア */}
-          {activeTab === "edit" && (
-            <textarea
-              value={markdownContent}
-              onChange={(e) => setMarkdownContent(e.target.value)}
-              className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="ここにMarkdownを入力"
-            />
-          )}
-          {/* プレビュ―タブ：入力されたMarkdownを HTML に変換して表示 */}
-          {activeTab === "preview" && (
-            <div
-              className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white overflow-auto"
-              // marked ライブラリで Markdown を HTML に変換して表示
-              dangerouslySetInnerHTML={{ __html: marked(markdownContent) }}
-            />
-          )}
+        {/* 自作の Markdown エディタ（常にエディタとプレビューを並列表示） */}
+        <div className="form-group grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 編集用テキストエリア */}
+          <textarea
+            value={markdownContent}
+            onChange={(e) => setMarkdownContent(e.target.value)}
+            className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="ここにMarkdownを入力"
+          />
+          {/* プレビュ―パネル：Markdown を HTML に変換して表示 */}
+          <div
+            className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white overflow-auto markdown-preview"
+            dangerouslySetInnerHTML={{ __html: marked(markdownContent) }}
+          />
         </div>
 
-        {/* 投稿ボタン */}
+        {/* 投稿ボタン（連打防止機能付き） */}
         <button
           type="submit"
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          disabled={isSubmitting}
+          className={`bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          投稿
+          {isSubmitting ? "送信中..." : "投稿"}
         </button>
       </form>
     </div>
