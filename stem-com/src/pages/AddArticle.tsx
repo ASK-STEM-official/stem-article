@@ -1,9 +1,11 @@
 // src/pages/AddArticle.tsx
-import React, { useState, useRef, useEffect, FormEvent } from "react";
+import React, { useState, useEffect, FormEvent } from "react";
 /* 
-   この記事を投稿するコンポーネント。Firebase Firestore にタイトルや本文、編集者などを保存し、
+   この記事を投稿するコンポーネント。
+   Firebase Firestore にタイトルや本文、編集者などを保存し、
    Base64形式の画像をGitHubにアップロードしてURL化する。
-   今回の修正として、"discord" というフィールドを firestore に追加するためのチェックボックスを加える。
+   なお、Markdownエディタは自作し、編集タブとプレビュータブを実装しています。
+   ※画像のアップロード処理などの仕組みは変更していません。
 */
 import {
   doc,
@@ -14,18 +16,16 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
-import { nanoid } from "nanoid"; // 短いユニークID生成用
-import { Editor } from "@toast-ui/react-editor";
-import "@toast-ui/editor/dist/toastui-editor.css";
+import { nanoid } from "nanoid"; // ユニークID生成用
 import { useNavigate } from "react-router-dom";
 
-import colorSyntax from "@toast-ui/editor-plugin-color-syntax";
-import "@toast-ui/editor-plugin-color-syntax/dist/toastui-editor-plugin-color-syntax.css"; // 必要に応じてCSSをインポート
-
-// Import Firebase Authentication
+// Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 
-// Import custom CSS for editor styling
+// Markdown を HTML に変換するための marked ライブラリをインポート
+import { marked } from "marked";
+
+// カスタムCSS（必要に応じてエディタ用のスタイルも追加してください）
 import "../AddArticle.css";
 
 // ユーザーの型定義
@@ -36,37 +36,37 @@ interface UserData {
 }
 
 const AddArticle: React.FC = () => {
-  // タイトル
+  // タイトルの状態管理
   const [title, setTitle] = useState<string>("");
-  // ユーザーIDとアバターURLを保持
+  // ユーザーIDとアバターURLの状態管理
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  // 自作のMarkdownエディタの入力内容の状態管理
+  const [markdownContent, setMarkdownContent] = useState<string>("ここにMarkdownを入力");
+  // 編集タブとプレビュータブの切り替え状態 ("edit" または "preview")
+  const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit");
 
-  // toast-ui Editor の参照
-  const editorRef = useRef<Editor>(null);
-
-  // 画面遷移用
+  // 画面遷移用の navigate フック
   const navigate = useNavigate();
   const auth = getAuth();
 
-  // ダークモードの状態を管理
+  // ダークモードの状態管理
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
-  // 全ユーザーのリスト, 選択された編集者, 編集者検索用
+  // 全ユーザーリスト、選択された編集者、編集者検索用の状態管理
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
 
   // ======== 追加: Discordに紹介するかどうかのチェックボックス状態 ========
-  // 紹介する場合は "discord" フィールドを false にするロジック。
-  // （例：チェック = true => discord: false）
+  // チェックを入れると firestore の "discord" フィールドが false で投稿されます。
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
 
   // --------------------------------------------
   // ダークモードの変更を監視する useEffect
   // --------------------------------------------
   useEffect(() => {
-    // 初期のダークモード状態を設定
+    // 初期のダークモード状態をチェック
     const checkDarkMode = () => {
       const dark = document.documentElement.classList.contains("dark");
       setIsDarkMode(dark);
@@ -74,13 +74,10 @@ const AddArticle: React.FC = () => {
 
     checkDarkMode();
 
-    // ダークモードの変更を監視するためのMutationObserverを設定
+    // MutationObserver を利用してダークモードの変更を監視
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "class"
-        ) {
+        if (mutation.type === "attributes" && mutation.attributeName === "class") {
           checkDarkMode();
         }
       });
@@ -88,23 +85,23 @@ const AddArticle: React.FC = () => {
 
     observer.observe(document.documentElement, { attributes: true });
 
-    // クリーンアップ関数
+    // コンポーネントのアンマウント時に observer を解除
     return () => {
       observer.disconnect();
     };
   }, []);
 
   // --------------------------------------------
-  // FirebaseAuthのユーザーログイン状態を監視
+  // FirebaseAuth のユーザーログイン状態を監視する useEffect
   // --------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
-        // ユーザーがログインしている場合、UIDとアバターURLを取得
+        // ログインしている場合、UID とアバターURL を設定
         setUserId(user.uid);
         setUserAvatar(user.photoURL || null);
       } else {
-        // ユーザーがログアウトしている場合、適切な処理を行う
+        // ログアウト時は状態をクリア
         setUserId(null);
         setUserAvatar(null);
       }
@@ -113,7 +110,7 @@ const AddArticle: React.FC = () => {
   }, [auth]);
 
   // --------------------------------------------
-  // Firestoreの users コレクションから全ユーザーを取得
+  // Firestore の users コレクションから全ユーザーを取得する useEffect
   // --------------------------------------------
   useEffect(() => {
     const fetchUsers = async () => {
@@ -135,10 +132,10 @@ const AddArticle: React.FC = () => {
   }, []);
 
   // --------------------------------------------
-  // 編集者を追加する
+  // 編集者を追加する関数
   // --------------------------------------------
   const handleAddEditor = (user: UserData) => {
-    // 既に選択されている場合は追加しない
+    // すでに選択されている場合は追加しない
     if (selectedEditors.find((editor) => editor.uid === user.uid)) {
       return;
     }
@@ -147,36 +144,35 @@ const AddArticle: React.FC = () => {
   };
 
   // --------------------------------------------
-  // 選択された編集者を削除する
+  // 選択された編集者を削除する関数
   // --------------------------------------------
   const handleRemoveEditor = (uid: string) => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
   // --------------------------------------------
-  // フォームの送信処理
+  // フォーム送信処理
   // --------------------------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     try {
-      const editorInstance = editorRef.current?.getInstance();
-      let markdownContent = editorInstance?.getMarkdown() || "";
+      // 自作エディタから Markdown コンテンツを取得
+      let content = markdownContent;
 
-      // 投稿時に画像を処理（Base64画像 → GitHubアップロード）
-      markdownContent = await processMarkdownContent(markdownContent);
+      // Markdown 内の Base64 画像を GitHub にアップロードして URL を置換
+      content = await processMarkdownContent(content);
 
-      // Firestoreに保存
-      const articleId = nanoid(10); // ユニークな記事IDを生成
+      // Firestore に記事を保存
+      const articleId = nanoid(10); // ユニークな記事ID生成
       const articleRef = doc(db, "articles", articleId);
 
-      // チェックボックスが true なら discord フィールドは false, チェックが false なら discord は true
-      // 「紹介するなら discord を false」という要望に対応
+      // チェックボックスの状態により discord フィールドの値を設定
       const discordValue = introduceDiscord ? false : true;
 
       await setDoc(articleRef, {
         title,
-        content: markdownContent,
+        content,
         created_at: serverTimestamp(),
         authorId: userId, // 正しいユーザーIDを設定
         authorAvatarUrl: userAvatar,
@@ -187,7 +183,7 @@ const AddArticle: React.FC = () => {
 
       alert("記事を追加しました！");
       setTitle("");
-      editorInstance?.setMarkdown("");
+      setMarkdownContent(""); // エディタの内容をリセット
       setSelectedEditors([]);
       setIntroduceDiscord(false); // チェックボックスのリセット
       navigate("/"); // 投稿後にリダイレクト
@@ -198,13 +194,13 @@ const AddArticle: React.FC = () => {
   };
 
   // --------------------------------------------
-  // Markdownに含まれるBase64画像をGitHubにアップロード
+  // Markdown 内の Base64 画像を GitHub にアップロードして URL を置換する関数
   // --------------------------------------------
   /**
-   * Markdownコンテンツ内のBase64画像を検出し、GitHubにアップロードしてURLを置換する
+   * Markdownコンテンツ内のBase64画像を検出し、GitHubにアップロードしてURLを置換する関数
    *
-   * @param {string} markdown - 元のMarkdownコンテンツ
-   * @returns {string} - 画像URLが置換されたMarkdownコンテンツ
+   * @param markdown - 元のMarkdownコンテンツ
+   * @returns 画像URLが置換されたMarkdownコンテンツ
    */
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     // Base64形式の画像を検出する正規表現
@@ -214,7 +210,7 @@ const AddArticle: React.FC = () => {
     // 画像アップロードのプロミスを格納する配列
     const uploadPromises: Promise<void>[] = [];
 
-    // マッチを一時的に保存するオブジェクト
+    // マッチしたBase64画像とGitHubのURLの対応を保存するオブジェクト
     const base64ToGitHubURLMap: { [key: string]: string } = {};
 
     let match;
@@ -270,7 +266,7 @@ const AddArticle: React.FC = () => {
   };
 
   // --------------------------------------------
-  // Firestore から GitHubトークン を取得
+  // Firestore から GitHubトークン を取得する関数
   // --------------------------------------------
   async function fetchGithubToken() {
     try {
@@ -291,14 +287,14 @@ const AddArticle: React.FC = () => {
   }
 
   // --------------------------------------------
-  // GitHubにBase64画像をアップロード
+  // GitHub に Base64画像をアップロードする関数
   // --------------------------------------------
   /**
-   * Base64形式の画像データをGitHubにアップロードし、URLを返す
+   * Base64形式の画像データをGitHubにアップロードし、画像のURLを返す関数
    *
-   * @param {string} base64Data - Base64形式の画像データ
-   * @param {string} originalMatch - 元のMarkdown画像マッチ
-   * @returns {string} - GitHubにアップロードされた画像のURL
+   * @param base64Data - Base64形式の画像データ
+   * @param originalMatch - 元のMarkdown画像マッチ
+   * @returns GitHubにアップロードされた画像のURL
    */
   const uploadBase64ImageToGitHub = async (
     base64Data: string,
@@ -307,29 +303,25 @@ const AddArticle: React.FC = () => {
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
     const GITHUB_TOKEN = await fetchGithubToken();
 
-    // 画像の種類を判別
-    const imageTypeMatch = originalMatch.match(
-      /data:image\/([a-zA-Z]+);base64,/
-    );
+    // 画像の種類を判別する
+    const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png"; // デフォルトはPNG
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
     }
 
-    // 短いユニークIDを生成してファイル名を作成
+    // ユニークなファイル名を生成
     const id = nanoid(10); // 10文字のユニークID
     const fileName = `${id}.${imageType}`;
-
-    // ファイルアップロード用のAPI URLを構築
     const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
 
-    // リクエストペイロードを準備
+    // ファイルアップロード用のリクエストペイロードを作成
     const payload = {
       message: `Add image: ${fileName}`,
       content: base64Data,
     };
 
-    // GitHubに画像をアップロードするリクエストを送信
+    // GitHub に画像をアップロードするリクエストを送信
     const response = await fetch(fileApiUrl, {
       method: "PUT",
       headers: {
@@ -344,7 +336,7 @@ const AddArticle: React.FC = () => {
       throw new Error(error.message);
     }
 
-    // GitHub上の画像URLを構築
+    // GitHub 上の画像URLを構築して返す
     const imageUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     return imageUrl;
   };
@@ -360,10 +352,7 @@ const AddArticle: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label
-            htmlFor="title"
-            className="block text-gray-700 dark:text-gray-300"
-          >
+          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
             タイトル
           </label>
           <input
@@ -381,7 +370,7 @@ const AddArticle: React.FC = () => {
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
-            {/* チェック → discord: false になるロジック */}
+            {/* チェックを入れると firestore の "discord" フィールドが false で投稿される */}
             <input
               type="checkbox"
               className="ml-2"
@@ -406,17 +395,15 @@ const AddArticle: React.FC = () => {
             onChange={(e) => setEditorSearch(e.target.value)}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {/* 編集者の候補リスト */}
+          {/* 編集者候補リスト */}
           {editorSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
                 .filter(
                   (user) =>
-                    user.displayName
-                      .toLowerCase()
-                      .includes(editorSearch.toLowerCase()) &&
-                    user.uid !== userId && // 自分自身を除外
-                    !selectedEditors.find((editor) => editor.uid === user.uid) // 既に選択されている編集者を除外
+                    user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
+                    user.uid !== userId && // 自分自身は除外
+                    !selectedEditors.find((editor) => editor.uid === user.uid) // 既に選択済みの編集者は除外
                 )
                 .map((user) => (
                   <li
@@ -438,9 +425,7 @@ const AddArticle: React.FC = () => {
                 ))}
               {allUsers.filter(
                 (user) =>
-                  user.displayName
-                    .toLowerCase()
-                    .includes(editorSearch.toLowerCase()) &&
+                  user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
                   user.uid !== userId &&
                   !selectedEditors.find((editor) => editor.uid === user.uid)
               ).length === 0 && (
@@ -487,24 +472,49 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* コンテンツ入力 */}
+        {/* 自作の Markdown エディタ */}
         <div className="form-group">
-          <label
-            htmlFor="content"
-            className="block text-gray-700 dark:text-gray-300"
-          >
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">
             内容 (Markdown)
           </label>
-          <Editor
-            ref={editorRef}
-            initialValue="ここにMarkdownを入力"
-            previewStyle="vertical"
-            height="400px"
-            initialEditType="wysiwyg" // WYSIWYGモードに設定
-            useCommandShortcut
-            plugins={[colorSyntax]}
-            theme={isDarkMode ? "dark" : "light"} // ダークモードに応じてテーマを設定
-          />
+          {/* 編集・プレビュー切替用のタブボタン */}
+          <div className="mb-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("edit")}
+              className={`px-4 py-2 mr-2 border rounded ${
+                activeTab === "edit" ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-700 text-gray-800"
+              }`}
+            >
+              編集
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("preview")}
+              className={`px-4 py-2 border rounded ${
+                activeTab === "preview" ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-700 text-gray-800"
+              }`}
+            >
+              プレビュー
+            </button>
+          </div>
+          {/* 編集タブ：Markdown入力用テキストエリア */}
+          {activeTab === "edit" && (
+            <textarea
+              value={markdownContent}
+              onChange={(e) => setMarkdownContent(e.target.value)}
+              className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="ここにMarkdownを入力"
+            />
+          )}
+          {/* プレビュ―タブ：入力されたMarkdownを HTML に変換して表示 */}
+          {activeTab === "preview" && (
+            <div
+              className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white overflow-auto"
+              // marked ライブラリで Markdown を HTML に変換して表示
+              dangerouslySetInnerHTML={{ __html: marked(markdownContent) }}
+            />
+          )}
         </div>
 
         {/* 投稿ボタン */}
