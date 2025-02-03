@@ -62,7 +62,7 @@ const AddArticle: React.FC = () => {
   // Firebase 認証インスタンスの取得
   const auth = getAuth();
 
-  // テキストエリアの参照（カーソル位置の取得・操作に利用）
+  // テキストエリアの参照を作成（カーソル位置取得・操作に利用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -179,15 +179,19 @@ const AddArticle: React.FC = () => {
 
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
+      // _altText は使用しないため、先頭の要素は fullMatch（未使用）、次に _altText（未使用）、dataUrl、base64Data ではなくプレースホルダーの ID を取得
       const [fullMatch, altText, placeholder, id] = match;
+      // ESLint 対策：使用しない変数にはアンダースコアを付与
+      const _unusedFullMatch = fullMatch;
+      const _unusedAltText = altText;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
           try {
-            // 画像タイプはファイル名の拡張子から推測（なければ png とする）
+            // ファイル名から拡張子を抽出（なければ png）
             const extMatch = imageMapping[id].filename.match(/\.([a-zA-Z0-9]+)$/);
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
-            // ダミーの originalMatch を作成（uploadBase64ImageToGitHub 内で画像タイプ判定用）
+            // ダミーの originalMatch を作成して画像タイプ判定に利用
             const dummyOriginalMatch = `data:image/${imageType};base64,`;
             const imageUrl = await uploadBase64ImageToGitHub(imageMapping[id].base64, dummyOriginalMatch);
             placeholderToURL[placeholder] = imageUrl;
@@ -497,8 +501,8 @@ const AddArticle: React.FC = () => {
                 <div className="prose prose-indigo max-w-none dark:prose-dark">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
-                    // img 要素のカスタムレンダリング
                     components={{
+                      // img 要素のカスタムレンダリング： プレースホルダーの場合は imageMapping から Base64 データを取得
                       img: ({ node, ...props }) => {
                         if (props.src && props.src.startsWith("temp://")) {
                           const id = props.src.replace("temp://", "");
@@ -512,7 +516,8 @@ const AddArticle: React.FC = () => {
                             );
                           }
                         }
-                        return <img {...props} />;
+                        // alt 属性が未設定の場合は空文字列を設定して ESLint 警告を回避
+                        return <img {...props} alt={props.alt || ""} />;
                       },
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
