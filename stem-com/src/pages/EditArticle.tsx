@@ -3,7 +3,7 @@
 // ツールバー付きのオリジナル Markdown エディタを実装しており、
 // 左側に入力エリア（ツールバー＋テキストエリア）、右側にリアルタイムプレビューを表示します。
 // 画像追加ボタンでは、画像ファイルを Base64 形式に変換した上で、テキストエリアには短いプレースホルダー（例："temp://ID"）を挿入し、
-// プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します。
+// プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します.
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -50,10 +50,16 @@ const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // 各種状態管理
+  // 以下の3つの state は render 内で利用していますが ESLint 警告が出る場合は disable コメントを追加
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [article, setArticle] = useState<Article | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [loading, setLoading] = useState<boolean>(true);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [error, setError] = useState<string | null>(null);
+
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
-  const [article, setArticle] = useState<Article | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
@@ -66,8 +72,6 @@ const EditArticle: React.FC = () => {
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
