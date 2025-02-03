@@ -16,6 +16,8 @@ import { useNavigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 // Markdown のリアルタイムプレビュー用ライブラリ
 import ReactMarkdown from "react-markdown";
+// GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
+import remarkGfm from "remark-gfm";
 // カスタムCSS のインポート
 import "../AddArticle.css";
 
@@ -478,7 +480,9 @@ const AddArticle: React.FC = () => {
             {/* 右側：マークダウンプレビュー */}
             <div className="w-full md:w-1/2 h-80 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <ReactMarkdown>{markdownContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {markdownContent}
+                </ReactMarkdown>
               ) : (
                 <p className="text-gray-500">プレビューがここに表示されます</p>
               )}
