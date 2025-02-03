@@ -36,21 +36,14 @@ interface UserData {
  * AddArticle コンポーネント
  * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加や画像のアップロードを行い、
  * Firestore に記事を保存する。
- *
- * ※本実装例では、画像アップロード時に生成される Markdown（rawMarkdownContent）は
- *    ![画像: ファイル名](temp://ID) の形式で保存され、プレビューでは Base64 画像に置換されます。
- *    一方、Markdown エディタ（左側）には displayMarkdownContent として「ファイル名」だけが表示されます。
- *    ※エディタは readOnly として実装しています。
  */
 const AddArticle: React.FC = () => {
   // ----------------------------
   // 各種状態管理
   // ----------------------------
   const [title, setTitle] = useState<string>("");
-  // rawMarkdownContent は実際に保存・プレビューに利用する Markdown の内容
-  const [rawMarkdownContent, setRawMarkdownContent] = useState<string>("");
-  // displayMarkdownContent はエディタに表示するテキスト（画像部分はファイル名のみ）
-  const [displayMarkdownContent, setDisplayMarkdownContent] = useState<string>("");
+  const [markdownContent, setMarkdownContent] = useState<string>("");
+
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
@@ -65,7 +58,7 @@ const AddArticle: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  // キーはアップロード時に生成した一意の ID、値は Base64 とファイル名
+  // ※アップロード時に生成した "temp://xxxx" の ID と、Base64画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
@@ -74,7 +67,7 @@ const AddArticle: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // forceRender state を追加して再レンダリングを強制
+  // 再レンダリング強制用
   const [forceRender, setForceRender] = useState<boolean>(false);
 
   const navigate = useNavigate();
@@ -84,24 +77,12 @@ const AddArticle: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
-  // rawMarkdownContent の変更に合わせ displayMarkdownContent を更新する
-  // ここでは、画像の Markdown 表現 ![画像: filename](temp://ID) を filename に変換します。
-  // ----------------------------
-  useEffect(() => {
-    const transformed = rawMarkdownContent.replace(
-      /!\[画像: ([^\]]+)\]\(temp:\/\/[a-zA-Z0-9]+\)/g,
-      "$1"
-    );
-    setDisplayMarkdownContent(transformed);
-  }, [rawMarkdownContent]);
-
-  // ----------------------------
-  // rawMarkdownContent や imageMapping の変更時に再レンダリングを強制する
+  // imageMapping や markdownContent の変更時に再レンダリングを強制する
   // ----------------------------
   useEffect(() => {
     setForceRender((prev) => !prev);
     console.log("Debug: forceRender toggled.");
-  }, [imageMapping, rawMarkdownContent]);
+  }, [imageMapping, markdownContent]);
 
   // ----------------------------
   // imageMapping の変更をデバッグログ出力
@@ -166,17 +147,9 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // テキストエディタのカーソル位置にテキストを挿入する処理（※今回は手動編集は不可とする）
-  // ----------------------------
-  const insertAtCursor = (text: string) => {
-    if (!textareaRef.current) return;
-    // ここではエディタは readOnly のため、ユーザー編集を想定していません
-  };
-
-  // ----------------------------
   // 画像アップロードモーダル内での処理
-  // 画像ファイルを読み込み、Base64形式に変換後、rawMarkdownContent に画像 Markdown を追加する
   // ----------------------------
+  // 画像ファイルを読み込み、Base64 形式に変換後、Markdown に "temp://xxx" の画像記法を挿入
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
@@ -184,27 +157,29 @@ const AddArticle: React.FC = () => {
     }
     if (isUploading) return;
     setIsUploading(true);
+
     const reader = new FileReader();
     reader.onload = () => {
       const base64Data = reader.result as string;
-      const id = nanoid(6); // ユニークなID生成
+      const id = nanoid(6); // ユニークID生成
       const placeholder = `temp://${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
 
-      // rawMarkdownContent に画像 Markdown を追加（プレビュー用）
+      // Markdown に画像記法を追加
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
-      setRawMarkdownContent((prev) => {
+      setMarkdownContent((prev) => {
         const newContent = prev + imageMarkdown;
-        console.log("Debug: Updated rawMarkdownContent:", newContent);
+        console.log("Debug: Updated markdownContent:", newContent);
         return newContent;
       });
 
-      // imageMapping に画像のBase64データとファイル名を登録
+      // imageMapping に登録
       setImageMapping((prev) => {
         const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
         console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
         return newMapping;
       });
+
       setShowImageModal(false);
       setSelectedImageFile(null);
       setIsUploading(false);
@@ -217,17 +192,19 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
-  // ※最終的な記事データ保存前に実行され、rawMarkdownContent 内の "temp://xxx" プレースホルダーを実際のアップロード先URLに置換する
+  // Markdown 内のプレースホルダーを GitHub にアップして置換する処理
+  // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const placeholderToURL: { [key: string]: string } = {};
+
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 使用しない変数は破棄するため、先頭2要素は無視する
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const [, , placeholder, id] = match;
       console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
+
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
           try {
@@ -236,7 +213,7 @@ const AddArticle: React.FC = () => {
               console.log("Debug: No imageMapping entry for id:", id);
               return;
             }
-            // 拡張子の取得
+            // 拡張子を取得
             const extMatch = entry.filename.match(/\.([a-zA-Z0-9]+)$/);
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
             const original = `data:image/${imageType};base64,`;
@@ -251,6 +228,7 @@ const AddArticle: React.FC = () => {
         uploadPromises.push(p);
       }
     }
+
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
@@ -285,7 +263,7 @@ const AddArticle: React.FC = () => {
   }
 
   // ----------------------------
-  // GitHub に Base64画像をアップロードする処理
+  // GitHub に Base64画像をアップロード
   // ----------------------------
   const uploadBase64ImageToGitHub = async (
     base64Data: string,
@@ -293,21 +271,26 @@ const AddArticle: React.FC = () => {
   ): Promise<string> => {
     const token = await fetchGithubToken();
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
+
     // 画像タイプを抽出
     const imageTypeMatch = originalHead.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
     }
+
     const uniqueId = nanoid(10);
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
-    // base64Data に "data:image/xxx;base64," が含まれる場合は除去し、純粋なBase64文字列にする
+
+    // Base64 の "data:image/xxx;base64," を除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
+
     const payload = {
       message: `Add image: ${fileName}`,
       content: pureBase64,
     };
+
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
@@ -316,10 +299,12 @@ const AddArticle: React.FC = () => {
       },
       body: JSON.stringify(payload),
     });
+
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.message);
     }
+
     const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     console.log("Debug: GitHub uploaded URL:", uploadedUrl);
     return uploadedUrl;
@@ -332,13 +317,16 @@ const AddArticle: React.FC = () => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
+
     try {
-      let content = rawMarkdownContent;
-      // Markdown の画像プレースホルダーをアップロードして置換する
+      let content = markdownContent;
+      // プレースホルダーをアップロード済みURLに置換
       content = await processMarkdownContent(content);
+
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
       const discordFlag = introduceDiscord ? false : true; // 環境に合わせて
+
       await setDoc(docRef, {
         title,
         content,
@@ -348,11 +336,14 @@ const AddArticle: React.FC = () => {
         editors: selectedEditors.map((ed) => ed.uid),
         discord: discordFlag,
       });
+
       alert("記事を追加しました！");
+      // フォームリセット
       setTitle("");
-      setRawMarkdownContent("");
+      setMarkdownContent("");
       setSelectedEditors([]);
       setIntroduceDiscord(false);
+
       navigate("/");
     } catch (err) {
       console.error("エラー:", err);
@@ -364,11 +355,18 @@ const AddArticle: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
+        記事を追加
+      </h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">タイトル</label>
+          <label
+            htmlFor="title"
+            className="block text-gray-700 dark:text-gray-300"
+          >
+            タイトル
+          </label>
           <input
             type="text"
             id="title"
@@ -379,6 +377,7 @@ const AddArticle: React.FC = () => {
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+
         {/* Discordチェックボックス（不要なら削除） */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
@@ -391,9 +390,12 @@ const AddArticle: React.FC = () => {
             />
           </label>
         </div>
+
         {/* 編集者追加 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">
+            編集者を追加
+          </label>
           <input
             type="text"
             placeholder="編集者を検索"
@@ -420,8 +422,14 @@ const AddArticle: React.FC = () => {
                     onClick={() => handleAddEditor(user)}
                   >
                     <div className="flex items-center">
-                      <img src={user.avatarUrl} alt={user.displayName} className="w-6 h-6 rounded-full mr-2" />
-                      <span className="text-gray-800 dark:text-gray-100">{user.displayName}</span>
+                      <img
+                        src={user.avatarUrl}
+                        alt={user.displayName}
+                        className="w-6 h-6 rounded-full mr-2"
+                      />
+                      <span className="text-gray-800 dark:text-gray-100">
+                        {user.displayName}
+                      </span>
                     </div>
                   </li>
                 ))}
@@ -434,15 +442,20 @@ const AddArticle: React.FC = () => {
                   !selectedEditors.find((ed) => ed.uid === u.uid)
                 );
               }).length === 0 && (
-                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">該当するユーザーが見つかりません。</li>
+                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">
+                  該当するユーザーが見つかりません。
+                </li>
               )}
             </ul>
           )}
         </div>
+
         {/* 選択された編集者 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
-            <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">
+              現在の編集者
+            </label>
             <ul className="space-y-2">
               {selectedEditors.map((editor) => (
                 <li
@@ -450,8 +463,14 @@ const AddArticle: React.FC = () => {
                   className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
                 >
                   <div className="flex items-center">
-                    <img src={editor.avatarUrl} alt={editor.displayName} className="w-6 h-6 rounded-full mr-2" />
-                    <span className="text-gray-800 dark:text-gray-100">{editor.displayName}</span>
+                    <img
+                      src={editor.avatarUrl}
+                      alt={editor.displayName}
+                      className="w-6 h-6 rounded-full mr-2"
+                    />
+                    <span className="text-gray-800 dark:text-gray-100">
+                      {editor.displayName}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -465,31 +484,45 @@ const AddArticle: React.FC = () => {
             </ul>
           </div>
         )}
+
         {/* Markdown エディタ部分 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">内容 (Markdown)</label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">
+            内容 (Markdown)
+          </label>
           <div className="flex flex-col md:flex-row gap-4">
-            {/* 左側：Markdownエディタ（表示はファイル名のみ） */}
+            {/* 左側：テキストエリア（プレーンテキスト） */}
             <div className="w-full md:w-1/2">
+              {/* insertAtCursor の呼び出しボタンは削除（未使用につきエラー発生） */}
               <textarea
                 ref={textareaRef}
-                value={displayMarkdownContent}
-                readOnly
+                value={markdownContent}
+                onChange={(e) => {
+                  setMarkdownContent(e.target.value);
+                  console.log("Debug: markdownContent changed:", e.target.value);
+                }}
+                placeholder="ここにMarkdownを入力"
                 className="w-full h-80 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowImageModal(true)}
+                className="mt-2 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                画像追加
+              </button>
             </div>
             {/* 右側：プレビュー（Base64画像表示） */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
-              {rawMarkdownContent.trim() ? (
+              {markdownContent.trim() ? (
                 <div
                   className="prose prose-indigo max-w-none dark:prose-dark"
-                  key={rawMarkdownContent + JSON.stringify(imageMapping) + forceRender}
+                  key={markdownContent + JSON.stringify(imageMapping) + forceRender}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
                       // 画像コンポーネントのカスタムレンダラー
-                      // rawMarkdownContent 内の "temp://xxxx" を検出し、imageMapping から Base64データを取得して表示
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
@@ -510,15 +543,30 @@ const AddArticle: React.FC = () => {
                               />
                             );
                           }
-                          return <span style={{ color: "red" }}>画像読み込みエラー: {id}</span>;
+                          return (
+                            <span style={{ color: "red" }}>
+                              画像読み込みエラー: {id}
+                            </span>
+                          );
                         }
-                        return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
+                        return (
+                          <img
+                            {...props}
+                            alt={props.alt || ""}
+                            style={{ maxWidth: "100%" }}
+                          />
+                        );
                       },
                       // コードブロックのシンタックスハイライト
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
-                          <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
+                          <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={match[1]}
+                            PreTag="div"
+                            {...props}
+                          >
                             {String(children).replace(/\n$/, "")}
                           </SyntaxHighlighter>
                         ) : (
@@ -529,7 +577,7 @@ const AddArticle: React.FC = () => {
                       },
                     }}
                   >
-                    {rawMarkdownContent}
+                    {markdownContent}
                   </ReactMarkdown>
                 </div>
               ) : (
@@ -549,7 +597,9 @@ const AddArticle: React.FC = () => {
       {showImageModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-80">
-            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">画像をアップロード</h2>
+            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">
+              画像をアップロード
+            </h2>
             <input
               type="file"
               accept="image/*"
