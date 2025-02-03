@@ -66,7 +66,7 @@ const AddArticle: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // forceRender state を追加して再レンダリングを強制
+  // forceRender state を追加して再レンダリングを強制する
   const [forceRender, setForceRender] = useState<boolean>(false);
 
   const navigate = useNavigate();
@@ -84,7 +84,7 @@ const AddArticle: React.FC = () => {
   }, [imageMapping, markdownContent]);
 
   // ----------------------------
-  // imageMapping の変更をデバッグログ出力（React DevTools でも確認可能）
+  // imageMapping の変更をデバッグログ出力
   // ----------------------------
   useEffect(() => {
     console.log("Debug: imageMapping updated:", imageMapping);
@@ -146,7 +146,7 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // テキストエリアのカーソル位置にテキストを挿入する処理
+  // テキストエディタのカーソル位置にテキストを挿入する処理
   // ----------------------------
   const insertAtCursor = (text: string) => {
     if (!textareaRef.current) return;
@@ -550,7 +550,8 @@ const AddArticle: React.FC = () => {
                           typeof props.src === "string" &&
                           props.src.startsWith("temp://")
                         ) {
-                          const id = props.src.replace("temp://", "");
+                          // 余計な空白を除去するため trim() を使用
+                          const id = props.src.replace("temp://", "").trim();
                           const mapped = imageMapping[id];
                           console.log("Debug: Custom image renderer - id:", id, "mapped:", mapped);
                           if (mapped) {
