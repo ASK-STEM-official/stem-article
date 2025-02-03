@@ -32,6 +32,11 @@ interface UserData {
   avatarUrl: string;
 }
 
+/**
+ * AddArticle コンポーネント
+ * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加や画像のアップロードを行い、
+ * Firestore に記事を保存する。
+ */
 const AddArticle: React.FC = () => {
   // ----------------------------
   // 各種状態管理
@@ -39,7 +44,6 @@ const AddArticle: React.FC = () => {
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
@@ -105,7 +109,7 @@ const AddArticle: React.FC = () => {
   }, []);
 
   // ----------------------------
-  // 編集者を追加
+  // 編集者を追加する処理
   // ----------------------------
   const handleAddEditor = (user: UserData) => {
     if (!selectedEditors.some((editor) => editor.uid === user.uid)) {
@@ -115,14 +119,14 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // 選択された編集者を削除
+  // 選択された編集者を削除する処理
   // ----------------------------
   const handleRemoveEditor = (uid: string) => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
   // ----------------------------
-  // テキストエリアのカーソル位置にテキスト挿入
+  // テキストエリアのカーソル位置にテキストを挿入する処理
   // ----------------------------
   const insertAtCursor = (text: string) => {
     if (!textareaRef.current) return;
@@ -134,7 +138,7 @@ const AddArticle: React.FC = () => {
     const updated = before + text + after;
     setMarkdownContent(updated);
 
-    // カーソル位置を挿入後に
+    // 挿入後のカーソル位置を調整
     setTimeout(() => {
       textareaRef.current?.focus();
       textareaRef.current!.selectionStart = selectionStart + text.length;
@@ -155,16 +159,17 @@ const AddArticle: React.FC = () => {
     setIsUploading(true);
 
     const reader = new FileReader();
+    // FileReaderで画像ファイルを読み込み、Base64データを取得する
     reader.onload = () => {
       const base64Data = reader.result as string;
       const id = nanoid(6);
       const placeholder = `temp://${id}`;
 
-      // 改行ありのMarkdown記法で挿入
+      // 改行ありのMarkdown記法で画像を挿入
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
 
-      // imageMapping に登録
+      // imageMapping に画像のBase64データとファイル名を登録
       setImageMapping((prev) => ({
         ...prev,
         [id]: { base64: base64Data, filename: selectedImageFile.name },
@@ -182,7 +187,7 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換
+  // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
   // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
@@ -230,7 +235,7 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // Firestore から GitHub トークン取得
+  // Firestore から GitHub トークンを取得する処理
   // ----------------------------
   async function fetchGithubToken() {
     try {
@@ -251,7 +256,7 @@ const AddArticle: React.FC = () => {
   }
 
   // ----------------------------
-  // GitHub に Base64 画像をアップロード
+  // GitHub に Base64画像をアップロードする処理
   // ----------------------------
   const uploadBase64ImageToGitHub = async (
     base64Data: string,
@@ -271,7 +276,7 @@ const AddArticle: React.FC = () => {
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
 
-    // base64Data が "data:image/xxx;base64," を含むなら除去
+    // base64Data に "data:image/xxx;base64," が含まれる場合は除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
 
     const payload = {
@@ -293,12 +298,12 @@ const AddArticle: React.FC = () => {
       throw new Error(err.message);
     }
 
-    // GitHub 上の画像URL
+    // GitHub 上の画像URLを返す
     return `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
   };
 
   // ----------------------------
-  // フォーム送信
+  // フォーム送信時の処理
   // ----------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -307,10 +312,10 @@ const AddArticle: React.FC = () => {
     setIsSubmitting(true);
     try {
       let content = markdownContent;
-      // Markdownの画像プレースホルダーをアップロードして置換
+      // Markdown の画像プレースホルダーをアップロードして置換
       content = await processMarkdownContent(content);
 
-      // Firestoreに記事を追加
+      // Firestore に記事を追加
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
       const discordFlag = introduceDiscord ? false : true; // 環境に合わせて
@@ -556,16 +561,17 @@ const AddArticle: React.FC = () => {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
+                      // 画像コンポーネントのカスタムレンダラー
                       img: ({ node, ...props }) => {
-                        // temp://xxxxxx の場合は imageMapping から Base64 を取得
                         if (
                           props.src &&
                           typeof props.src === "string" &&
                           props.src.startsWith("temp://")
                         ) {
+                          // プレースホルダーからIDを抽出し、imageMappingからBase64データを取得
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
-                          if (mapped && mapped.base64.startsWith("data:")) {
+                          if (mapped) {
                             return (
                               <img
                                 {...props}
@@ -581,11 +587,12 @@ const AddArticle: React.FC = () => {
                             </span>
                           );
                         }
-                        // 通常の img
+                        // 通常の画像の場合はそのままレンダリング
                         return (
                           <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />
                         );
                       },
+                      // コードブロックのシンタックスハイライト
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
