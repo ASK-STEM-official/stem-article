@@ -50,6 +50,7 @@ const AddArticle: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
+  // Discord 関連（必要に応じて削除可能）
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
@@ -284,8 +285,10 @@ const AddArticle: React.FC = () => {
     try {
       let content = markdownContent;
       content = await processMarkdownContent(content);
+      // 新規記事として追加する場合は記事IDを生成（必要に応じて merge: true に変更してください）
       const articleId = nanoid(10);
       const articleRef = doc(db, "articles", articleId);
+      // Discord 関連の設定はそのまま残していますが、不要であれば削除してください
       const discordValue = introduceDiscord ? false : true;
       await setDoc(articleRef, {
         title,
@@ -332,7 +335,7 @@ const AddArticle: React.FC = () => {
           />
         </div>
 
-        {/* Discord 紹介チェックボックス */}
+        {/* Discord 紹介チェックボックス（不要な場合はコメントアウト可） */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
@@ -513,7 +516,7 @@ const AddArticle: React.FC = () => {
             {/* 右側：リアルタイムプレビュー */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <div className="prose prose-indigo max-w-none dark:prose-dark">
+                <div className="prose prose-indigo max-w-none dark:prose-dark" key={markdownContent + JSON.stringify(imageMapping)}>
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
