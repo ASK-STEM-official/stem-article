@@ -188,7 +188,7 @@ const AddArticle: React.FC = () => {
 
     while ((match = placeholderRegex.exec(markdown)) !== null) {
       // 各要素を個別の変数に取り出す (no-loop-func 対策)
-      const fullMatch = match[0];     // '![...](temp://abc123)' 全体
+      //const fullMatch = match[0];     // '![...](temp://abc123)' 全体
       const altText = match[1];      // '...' の部分
       const placeholder = match[2];  // 'temp://abc123'
       const id = match[3];          // 'abc123'
