@@ -1,33 +1,27 @@
-// src/pages/AddArticle.tsx
-// このファイルは記事投稿用コンポーネントです。
+// src/pages/EditArticle.tsx
+// このファイルは記事編集用コンポーネントです。
 // ツールバー付きのオリジナル Markdown エディタを実装しており、
 // 左側に入力エリア（ツールバー＋テキストエリア）、右側にリアルタイムプレビューを表示します。
 // 画像追加ボタンでは、画像ファイルを Base64 形式に変換した上で、テキストエリアには短いプレースホルダー（例："temp://ID"）を挿入し、
 // プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します。
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
-// Firebase Firestore 関連のインポート
+import { useParams, useNavigate } from "react-router-dom";
 import {
   doc,
+  getDoc,
   setDoc,
   serverTimestamp,
   collection,
   getDocs,
-  getDoc,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
 import { nanoid } from "nanoid"; // ユニークID生成用ライブラリ
-import { useNavigate } from "react-router-dom";
-// Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-// Markdown のリアルタイムプレビュー用ライブラリ
 import ReactMarkdown from "react-markdown";
-// GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// コードブロックのシンタックスハイライト用コンポーネントのインポート
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-// カスタムCSS のインポート（必要に応じて編集）
 import "../AddArticle.css";
 
 // ユーザー情報の型定義
@@ -37,32 +31,48 @@ interface UserData {
   avatarUrl: string;
 }
 
-const AddArticle: React.FC = () => {
-  // ----------------------------
+// 記事の型定義
+interface Article {
+  id: string;
+  title: string;
+  content: string;
+  created_at?: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  authorId: string;
+  authorAvatarUrl?: string;
+  editors?: string[]; // 編集者のUIDの配列
+}
+
+const EditArticle: React.FC = () => {
+  // URLパラメータから記事IDを取得
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
   // 各種状態管理
-  // ----------------------------
   const [title, setTitle] = useState<string>("");
-  // Markdown の内容はテキストエリアの状態で管理
   const [markdownContent, setMarkdownContent] = useState<string>("");
+  const [article, setArticle] = useState<Article | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-  const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   // 画像のプレースホルダーと Base64 データの対応マッピング
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
+  // 連打防止用の状態
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // 画面遷移用
-  const navigate = useNavigate();
-  // Firebase 認証インスタンスの取得
+  // Firebase 認証
   const auth = getAuth();
 
-  // テキストエリアの参照を作成（カーソル位置取得・操作に利用）
+  // テキストエリアの参照（カーソル位置取得・操作に利用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -99,9 +109,57 @@ const AddArticle: React.FC = () => {
         console.error("ユーザーの取得に失敗しました:", error);
       }
     };
-
     fetchUsers();
   }, []);
+
+  // ----------------------------
+  // 編集対象の記事を取得する
+  // ----------------------------
+  useEffect(() => {
+    const fetchArticle = async () => {
+      if (!id) {
+        navigate("/");
+        return;
+      }
+      try {
+        const docRef = doc(db, "articles", id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data() as Article;
+          const fetchedArticle: Article = { id: docSnap.id, ...data };
+          setArticle(fetchedArticle);
+          setTitle(fetchedArticle.title);
+          setMarkdownContent(fetchedArticle.content);
+          // 編集者が設定されている場合、そのユーザー情報を取得
+          if (fetchedArticle.editors && Array.isArray(fetchedArticle.editors)) {
+            const editorsData: UserData[] = [];
+            for (const editorId of fetchedArticle.editors) {
+              const userDocRef = doc(db, "users", editorId);
+              const userDoc = await getDoc(userDocRef);
+              if (userDoc.exists()) {
+                const userData = userDoc.data();
+                editorsData.push({
+                  uid: userDoc.id,
+                  displayName: userData.displayName || "ユーザー",
+                  avatarUrl: userData.avatarUrl || "",
+                });
+              }
+            }
+            setSelectedEditors(editorsData);
+          }
+        } else {
+          setArticle(null);
+          navigate("/");
+        }
+      } catch (error) {
+        console.error("記事の取得に失敗しました:", error);
+        navigate("/");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchArticle();
+  }, [id, navigate]);
 
   // ----------------------------
   // 編集者を追加する処理
@@ -131,7 +189,6 @@ const AddArticle: React.FC = () => {
       const after = markdownContent.substring(end);
       const newContent = before + textToInsert + after;
       setMarkdownContent(newContent);
-      // 挿入後にカーソル位置を更新
       setTimeout(() => {
         textarea.focus();
         textarea.selectionStart = textarea.selectionEnd = start + textToInsert.length;
@@ -140,14 +197,15 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // 画像アップロードモーダル内でのアップロード処理
+  // 画像アップロードモーダル内でのアップロード処理（連打防止のため isUploading 状態を利用）
   // ----------------------------
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
       return;
     }
-
+    if (isUploading) return;
+    setIsUploading(true);
     const reader = new FileReader();
     reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
@@ -162,9 +220,11 @@ const AddArticle: React.FC = () => {
       setImageMapping((prev) => ({ ...prev, [id]: { base64: result, filename: selectedImageFile.name } }));
       setShowImageModal(false);
       setSelectedImageFile(null);
+      setIsUploading(false);
     };
     reader.onerror = () => {
       alert("画像の読み込みに失敗しました。");
+      setIsUploading(false);
     };
   };
 
@@ -180,7 +240,7 @@ const AddArticle: React.FC = () => {
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
       // 必要な値のみ取得（先頭2要素は不要なためスキップ）
-      const [, , placeholder, id] = match;
+      const [, altText, placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
@@ -273,44 +333,60 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // フォーム送信時の処理
+  // フォーム送信時の処理（連打防止のため isSubmitting 状態を利用）
   // ----------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       let content = markdownContent;
       // プレースホルダー画像を GitHub の URL に置換
       content = await processMarkdownContent(content);
-      const articleId = nanoid(10);
-      const articleRef = doc(db, "articles", articleId);
-      const discordValue = introduceDiscord ? false : true;
-      await setDoc(articleRef, {
-        title,
-        content,
-        created_at: serverTimestamp(),
-        authorId: userId,
-        authorAvatarUrl: userAvatar,
-        editors: selectedEditors.map((editor) => editor.uid),
-        discord: discordValue,
-      });
-      alert("記事を追加しました！");
-      setTitle("");
-      setMarkdownContent("");
-      setSelectedEditors([]);
-      setIntroduceDiscord(false);
-      navigate("/");
+      // Firestore 上の記事を更新（merge: true で部分更新）
+      const articleRef = doc(db, "articles", article!.id);
+      await setDoc(
+        articleRef,
+        {
+          title,
+          content,
+          updated_at: serverTimestamp(),
+          editors: selectedEditors.map((editor) => editor.uid),
+        },
+        { merge: true }
+      );
+      alert("記事を更新しました！");
+      navigate(`/articles/${article!.id}`);
     } catch (error) {
       console.error("エラー:", error);
-      alert("記事の投稿に失敗しました。");
+      alert("記事の更新に失敗しました。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (error || !article) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <p className="text-center text-red-500">{error || "記事が見つかりません。"}</p>
+      </div>
+    );
+  }
+
   // ----------------------------
-  // オリジナル Markdown エディタ GUI の描画
+  // 編集画面の描画
   // ----------------------------
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を編集</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
@@ -324,22 +400,6 @@ const AddArticle: React.FC = () => {
             required
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-        </div>
-
-        {/* Discord 紹介チェックボックス */}
-        <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            Discordに紹介する
-            <input
-              type="checkbox"
-              className="ml-2"
-              checked={introduceDiscord}
-              onChange={(e) => setIntroduceDiscord(e.target.checked)}
-            />
-          </label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            チェックを入れると Firestore の「discord」フィールドが false で投稿されます。
-          </p>
         </div>
 
         {/* 編集者追加 */}
@@ -504,7 +564,11 @@ const AddArticle: React.FC = () => {
                     components={{
                       // img 要素のカスタムレンダリング： プレースホルダーの場合は imageMapping から Base64 データを取得
                       img: ({ node, ...props }) => {
-                        if (props.src && props.src.startsWith("temp://")) {
+                        if (
+                          props.src &&
+                          typeof props.src === "string" &&
+                          props.src.startsWith("temp://")
+                        ) {
                           const id = props.src.replace("temp://", "");
                           if (imageMapping[id]) {
                             return (
@@ -512,12 +576,13 @@ const AddArticle: React.FC = () => {
                                 {...props}
                                 src={imageMapping[id].base64}
                                 alt={props.alt || `画像: ${imageMapping[id].filename}`}
+                                style={{ maxWidth: "100%" }}
                               />
                             );
                           }
                         }
                         // alt 属性が未設定の場合は空文字列を設定して ESLint 警告を回避
-                        return <img {...props} alt={props.alt || ""} />;
+                        return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
@@ -548,12 +613,13 @@ const AddArticle: React.FC = () => {
           </div>
         </div>
 
-        {/* 投稿ボタン */}
+        {/* 投稿ボタン（連打防止のため isSubmitting 状態を利用） */}
         <button
           type="submit"
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          disabled={isSubmitting}
+          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
         >
-          投稿
+          更新
         </button>
       </form>
 
@@ -586,7 +652,8 @@ const AddArticle: React.FC = () => {
               <button
                 type="button"
                 onClick={handleUploadImage}
-                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={isUploading}
+                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 アップロード
               </button>
@@ -598,4 +665,4 @@ const AddArticle: React.FC = () => {
   );
 };
 
-export default AddArticle;
+export default EditArticle;
