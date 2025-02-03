@@ -179,7 +179,7 @@ const AddArticle: React.FC = () => {
 
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 必要な値のみ取得（先頭2要素はスキップ）
+      // 必要な値のみ取得（先頭2要素は不要なためスキップ）
       const [, , placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
@@ -241,6 +241,7 @@ const AddArticle: React.FC = () => {
   ): Promise<string> => {
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
     const GITHUB_TOKEN = await fetchGithubToken();
+    // originalMatch は "data:image/xxx;base64," の形式なので、画像タイプを抽出
     const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
@@ -249,9 +250,11 @@ const AddArticle: React.FC = () => {
     const id = nanoid(10);
     const fileName = `${id}.${imageType}`;
     const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
+    // base64Data にプレフィックスが含まれている場合は除去
+    const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
     const payload = {
       message: `Add image: ${fileName}`,
-      content: base64Data,
+      content: pureBase64,
     };
     const response = await fetch(fileApiUrl, {
       method: "PUT",
