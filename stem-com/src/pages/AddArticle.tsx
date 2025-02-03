@@ -80,7 +80,7 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   useEffect(() => {
     setForceRender((prev) => !prev);
-    console.log("Debug: forceRender toggled. Current forceRender:", forceRender);
+    console.log("Debug: forceRender toggled.");
   }, [imageMapping, markdownContent]);
 
   // ----------------------------
