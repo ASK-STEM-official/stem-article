@@ -50,12 +50,14 @@ const AddArticle: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-  // Discord 関連（不要であれば削除してください）
+  // Discord 関連（必要に応じて削除可能）
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  const [imageMapping, setImageMapping] = useState<{ [key: string]: { base64: string; filename: string } }>({});
+  const [imageMapping, setImageMapping] = useState<{
+    [key: string]: { base64: string; filename: string };
+  }>({});
 
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -158,7 +160,7 @@ const AddArticle: React.FC = () => {
       // プレースホルダー用の短い ID を生成
       const id = nanoid(6);
       const placeholderUrl = `temp://${id}`;
-      // 改行を除いた形式でプレースホルダーを挿入
+      // テキストエリアには「画像: ファイル名」を示すプレースホルダーを挿入（改行なし）
       const imageMarkdown = `![画像: ${selectedImageFile.name}](${placeholderUrl})`;
       setMarkdownContent((prev) => prev + imageMarkdown);
       // 画像の Base64 データとファイル名を mapping に登録
@@ -185,7 +187,8 @@ const AddArticle: React.FC = () => {
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
       // 必要な値のみ取得（最初の2要素は破棄）
-      const [, altText, placeholder, id] = match;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [fullMatch, _altText, placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
@@ -536,7 +539,6 @@ const AddArticle: React.FC = () => {
                               />
                             );
                           } else {
-                            // もし Base64 データが取得できなければ代替テキストを表示
                             return <span>画像読み込みエラー</span>;
                           }
                         }
