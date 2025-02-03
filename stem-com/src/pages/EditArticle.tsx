@@ -239,8 +239,8 @@ const EditArticle: React.FC = () => {
 
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 必要な値のみ取得（_alt で未使用の altText を破棄）
-      const [_full, _alt, placeholder, id] = match;
+      // 必要な値のみ取得（最初の2要素は破棄）
+      const [, , placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
@@ -337,47 +337,36 @@ const EditArticle: React.FC = () => {
     try {
       let content = markdownContent;
       content = await processMarkdownContent(content);
-      const articleRef = doc(db, "articles", article!.id);
-      await setDoc(
-        articleRef,
-        {
-          title,
-          content,
-          updated_at: serverTimestamp(),
-          editors: selectedEditors.map((editor) => editor.uid),
-        },
-        { merge: true }
-      );
-      alert("記事を更新しました！");
-      navigate(`/articles/${article!.id}`);
+      const articleId = nanoid(10);
+      const articleRef = doc(db, "articles", articleId);
+      const discordValue = introduceDiscord ? false : true;
+      await setDoc(articleRef, {
+        title,
+        content,
+        created_at: serverTimestamp(),
+        authorId: userId,
+        authorAvatarUrl: userAvatar,
+        editors: selectedEditors.map((editor) => editor.uid),
+        discord: discordValue,
+      });
+      alert("記事を追加しました！");
+      setTitle("");
+      setMarkdownContent("");
+      setSelectedEditors([]);
+      setIntroduceDiscord(false);
+      navigate("/");
     } catch (error) {
       console.error("エラー:", error);
-      alert("記事の更新に失敗しました。");
+      alert("記事の投稿に失敗しました。");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  if (error || !article) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <p className="text-center text-red-500">{error || "記事が見つかりません。"}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
-        記事を編集
+        記事を追加
       </h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
@@ -394,6 +383,19 @@ const EditArticle: React.FC = () => {
             required
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+        </div>
+
+        {/* Discord 紹介チェックボックス */}
+        <div className="form-group">
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">
+            Discordに紹介する
+            <input
+              type="checkbox"
+              className="ml-2"
+              checked={introduceDiscord}
+              onChange={(e) => setIntroduceDiscord(e.target.checked)}
+            />
+          </label>
         </div>
 
         {/* 編集者追加 */}
@@ -429,7 +431,9 @@ const EditArticle: React.FC = () => {
                         alt={user.displayName}
                         className="w-6 h-6 rounded-full mr-2"
                       />
-                      <span className="text-gray-800 dark:text-gray-100">{user.displayName}</span>
+                      <span className="text-gray-800 dark:text-gray-100">
+                        {user.displayName}
+                      </span>
                     </div>
                   </li>
                 ))}

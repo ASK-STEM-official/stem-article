@@ -3,7 +3,7 @@
 // ツールバー付きのオリジナル Markdown エディタを実装しており、
 // 左側に入力エリア（ツールバー＋テキストエリア）、右側にリアルタイムプレビューを表示します。
 // 画像追加ボタンでは、画像ファイルを Base64 形式に変換した上で、テキストエリアには短いプレースホルダー（例："temp://ID"）を挿入し、
-// プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します。
+// プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します.
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
@@ -58,12 +58,16 @@ const AddArticle: React.FC = () => {
     [key: string]: { base64: string; filename: string };
   }>({});
 
+  // 連打防止用の状態
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+
   // 画面遷移用
   const navigate = useNavigate();
   // Firebase 認証インスタンスの取得
   const auth = getAuth();
 
-  // テキストエリアの参照（カーソル位置取得・操作に利用）
+  // テキストエリアの参照を作成（カーソル位置取得・操作に利用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -140,13 +144,15 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // 画像アップロードモーダル内でのアップロード処理
+  // 画像アップロードモーダル内でのアップロード処理（連打防止のため isUploading 状態を利用）
   // ----------------------------
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
       return;
     }
+    if (isUploading) return;
+    setIsUploading(true);
     const reader = new FileReader();
     reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
@@ -161,9 +167,11 @@ const AddArticle: React.FC = () => {
       setImageMapping((prev) => ({ ...prev, [id]: { base64: result, filename: selectedImageFile.name } }));
       setShowImageModal(false);
       setSelectedImageFile(null);
+      setIsUploading(false);
     };
     reader.onerror = () => {
       alert("画像の読み込みに失敗しました。");
+      setIsUploading(false);
     };
   };
 
@@ -178,16 +186,14 @@ const AddArticle: React.FC = () => {
 
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 必要な値のみ取得（先頭2要素は不要なため _alt で破棄）
-      const [_full, _alt, placeholder, id] = match;
+      // 必要な値のみ取得（最初の2要素は破棄）
+      const [, , placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
           try {
-            // ファイル名から拡張子を抽出（なければ png）
             const extMatch = imageMapping[id].filename.match(/\.([a-zA-Z0-9]+)$/);
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
-            // ダミーの originalMatch を作成して画像タイプ判定に利用
             const dummyOriginalMatch = `data:image/${imageType};base64,`;
             const imageUrl = await uploadBase64ImageToGitHub(imageMapping[id].base64, dummyOriginalMatch);
             placeholderToURL[placeholder] = imageUrl;
@@ -239,7 +245,6 @@ const AddArticle: React.FC = () => {
   ): Promise<string> => {
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
     const GITHUB_TOKEN = await fetchGithubToken();
-    // originalMatch は "data:image/xxx;base64," の形式なので、画像タイプを抽出
     const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
@@ -248,7 +253,6 @@ const AddArticle: React.FC = () => {
     const id = nanoid(10);
     const fileName = `${id}.${imageType}`;
     const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
-    // base64Data にプレフィックスが含まれている場合は除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
     const payload = {
       message: `Add image: ${fileName}`,
@@ -279,7 +283,6 @@ const AddArticle: React.FC = () => {
     setIsSubmitting(true);
     try {
       let content = markdownContent;
-      // プレースホルダー画像を GitHub の URL に置換
       content = await processMarkdownContent(content);
       const articleId = nanoid(10);
       const articleRef = doc(db, "articles", articleId);
@@ -570,7 +573,7 @@ const AddArticle: React.FC = () => {
           disabled={isSubmitting}
           className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
         >
-          更新
+          投稿
         </button>
       </form>
 
