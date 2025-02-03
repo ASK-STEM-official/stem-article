@@ -50,11 +50,14 @@ const AddArticle: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-  // Discord 関連の状態は削除しました
+  const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  const [imageMapping, setImageMapping] = useState<{ [key: string]: { base64: string; filename: string } }>({});
+  const [imageMapping, setImageMapping] = useState<{
+    [key: string]: { base64: string; filename: string };
+  }>({});
+
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -281,9 +284,9 @@ const AddArticle: React.FC = () => {
     try {
       let content = markdownContent;
       content = await processMarkdownContent(content);
-      // 新規記事として追加する場合、articleId を生成して使用（必要に応じて merge: true に変更）
       const articleId = nanoid(10);
       const articleRef = doc(db, "articles", articleId);
+      const discordValue = introduceDiscord ? false : true;
       await setDoc(articleRef, {
         title,
         content,
@@ -291,12 +294,13 @@ const AddArticle: React.FC = () => {
         authorId: userId,
         authorAvatarUrl: userAvatar,
         editors: selectedEditors.map((editor) => editor.uid),
+        discord: discordValue,
       });
       alert("記事を追加しました！");
       setTitle("");
       setMarkdownContent("");
       setSelectedEditors([]);
-      // 投稿完了後、記事一覧へ遷移（必要に応じてこの遷移を削除してください）
+      setIntroduceDiscord(false);
       navigate("/");
     } catch (error) {
       console.error("エラー:", error);
@@ -328,8 +332,8 @@ const AddArticle: React.FC = () => {
           />
         </div>
 
-        {/* Discord 紹介チェックボックス（不要な場合は削除） */}
-        {/* <div className="form-group">
+        {/* Discord 紹介チェックボックス */}
+        <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
             <input
@@ -339,7 +343,7 @@ const AddArticle: React.FC = () => {
               onChange={(e) => setIntroduceDiscord(e.target.checked)}
             />
           </label>
-        </div> */}
+        </div>
 
         {/* 編集者追加 */}
         <div className="form-group">
