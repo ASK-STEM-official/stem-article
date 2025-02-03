@@ -18,7 +18,7 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// HTML をそのままレンダリングするための rehype プラグイン
+// HTML をそのままレンダリングするための rehype プラグイン（npm install rehype-raw を実施してください）
 import rehypeRaw from "rehype-raw";
 // カスタムCSS のインポート
 import "../AddArticle.css";
@@ -124,7 +124,6 @@ const AddArticle: React.FC = () => {
     reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
       const result = reader.result as string;
-      // マークダウン形式の画像挿入文（alt テキストは「画像」）
       const imageMarkdown = `\n![画像](${result})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
       setShowImageModal(false);
@@ -143,7 +142,6 @@ const AddArticle: React.FC = () => {
 
     try {
       let content = markdownContent;
-      // 投稿時、Markdown 内の Base64 画像を GitHub にアップロードして URL に置換
       content = await processMarkdownContent(content);
 
       const articleId = nanoid(10);
