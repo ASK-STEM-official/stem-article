@@ -57,6 +57,7 @@ const AddArticle: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
+  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
@@ -68,7 +69,7 @@ const AddArticle: React.FC = () => {
   const navigate = useNavigate();
   const auth = getAuth();
 
-  // テキストエリア参照
+  // テキストエリア参照（Markdown入力エリア用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -140,15 +141,18 @@ const AddArticle: React.FC = () => {
 
     // 挿入後のカーソル位置を調整
     setTimeout(() => {
-      textareaRef.current?.focus();
-      textareaRef.current!.selectionStart = selectionStart + text.length;
-      textareaRef.current!.selectionEnd = selectionStart + text.length;
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = selectionStart + text.length;
+        textareaRef.current.selectionEnd = selectionStart + text.length;
+      }
     }, 0);
   };
 
   // ----------------------------
   // 画像アップロードモーダル内での処理
   // ----------------------------
+  // 画像ファイルを読み込み、Base64形式に変換後、Markdownに "temp://xxx" プレースホルダー付き記法を挿入
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
@@ -162,10 +166,11 @@ const AddArticle: React.FC = () => {
     // FileReaderで画像ファイルを読み込み、Base64データを取得する
     reader.onload = () => {
       const base64Data = reader.result as string;
-      const id = nanoid(6);
+      const id = nanoid(6); // ユニークなID生成
       const placeholder = `temp://${id}`;
 
       // 改行ありのMarkdown記法で画像を挿入
+      // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側でBase64画像に置換される
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
 
@@ -189,6 +194,7 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
   // ----------------------------
+  // ※最終的な記事データ保存前に実行され、"temp://xxx" プレースホルダーを実際のアップロード先URLに置換する
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
@@ -196,8 +202,7 @@ const AddArticle: React.FC = () => {
 
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const [fullMatch, _unusedAltText, placeholder, id] = match;
+      const [fullMatch, altText, placeholder, id] = match;
 
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
@@ -210,6 +215,7 @@ const AddArticle: React.FC = () => {
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
 
             const original = `data:image/${imageType};base64,`;
+            // GitHub へアップロードし、アップロード先のURLを取得
             const uploadedUrl = await uploadBase64ImageToGitHub(entry.base64, original);
 
             placeholderToURL[placeholder] = uploadedUrl;
@@ -222,7 +228,7 @@ const AddArticle: React.FC = () => {
       }
     }
 
-    // すべての画像をアップロードして Markdown を置換
+    // すべての画像アップロード完了後、Markdown内のプレースホルダーをアップロード先のURLに置換する
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
@@ -276,7 +282,7 @@ const AddArticle: React.FC = () => {
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
 
-    // base64Data に "data:image/xxx;base64," が含まれる場合は除去
+    // base64Data に "data:image/xxx;base64," が含まれる場合は除去し、純粋なBase64文字列にする
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
 
     const payload = {
@@ -312,10 +318,10 @@ const AddArticle: React.FC = () => {
     setIsSubmitting(true);
     try {
       let content = markdownContent;
-      // Markdown の画像プレースホルダーをアップロードして置換
+      // Markdown の画像プレースホルダーをアップロードして置換する
       content = await processMarkdownContent(content);
 
-      // Firestore に記事を追加
+      // Firestore に記事を追加する
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
       const discordFlag = introduceDiscord ? false : true; // 環境に合わせて
@@ -347,16 +353,12 @@ const AddArticle: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
-        記事を追加
-      </h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
-            タイトル
-          </label>
+          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">タイトル</label>
           <input
             type="text"
             id="title"
@@ -383,9 +385,7 @@ const AddArticle: React.FC = () => {
 
         {/* 編集者追加 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            編集者を追加
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
           <input
             type="text"
             placeholder="編集者を検索"
@@ -413,11 +413,7 @@ const AddArticle: React.FC = () => {
                     onClick={() => handleAddEditor(user)}
                   >
                     <div className="flex items-center">
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.displayName}
-                        className="w-6 h-6 rounded-full mr-2"
-                      />
+                      <img src={user.avatarUrl} alt={user.displayName} className="w-6 h-6 rounded-full mr-2" />
                       <span className="text-gray-800 dark:text-gray-100">{user.displayName}</span>
                     </div>
                   </li>
@@ -431,9 +427,7 @@ const AddArticle: React.FC = () => {
                   !selectedEditors.find((ed) => ed.uid === u.uid)
                 );
               }).length === 0 && (
-                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">
-                  該当するユーザーが見つかりません。
-                </li>
+                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">該当するユーザーが見つかりません。</li>
               )}
             </ul>
           )}
@@ -442,9 +436,7 @@ const AddArticle: React.FC = () => {
         {/* 選択された編集者 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
-            <label className="block text-gray-700 dark:text-gray-300 mb-2">
-              現在の編集者
-            </label>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
             <ul className="space-y-2">
               {selectedEditors.map((editor) => (
                 <li
@@ -452,14 +444,8 @@ const AddArticle: React.FC = () => {
                   className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
                 >
                   <div className="flex items-center">
-                    <img
-                      src={editor.avatarUrl}
-                      alt={editor.displayName}
-                      className="w-6 h-6 rounded-full mr-2"
-                    />
-                    <span className="text-gray-800 dark:text-gray-100">
-                      {editor.displayName}
-                    </span>
+                    <img src={editor.avatarUrl} alt={editor.displayName} className="w-6 h-6 rounded-full mr-2" />
+                    <span className="text-gray-800 dark:text-gray-100">{editor.displayName}</span>
                   </div>
                   <button
                     type="button"
@@ -476,60 +462,30 @@ const AddArticle: React.FC = () => {
 
         {/* Markdown エディタ部分 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            内容 (Markdown)
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">内容 (Markdown)</label>
           <div className="flex flex-col md:flex-row gap-4">
-            {/* 左側：テキストエリア＋ツールバー */}
+            {/* 左側：テキストエリア＋ツールバー（編集用・プレーンテキスト） */}
             <div className="w-full md:w-1/2">
               <div className="mb-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("# ")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("# ")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   見出し
                 </button>
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("**太字**")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("**太字**")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   太字
                 </button>
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("*斜体*")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("*斜体*")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   斜体
                 </button>
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("[リンク](http://)")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("[リンク](http://)") } className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   リンク
                 </button>
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("```\nコード\n```")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("```\nコード\n```")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   コードブロック
                 </button>
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("- ")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("- ")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   リスト
                 </button>
-                <button
-                  type="button"
-                  onClick={() => insertAtCursor("> ")}
-                  className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"
-                >
+                <button type="button" onClick={() => insertAtCursor("> ")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
                   引用
                 </button>
               </div>
@@ -551,24 +507,21 @@ const AddArticle: React.FC = () => {
               </button>
             </div>
 
-            {/* 右側：プレビュー */}
+            {/* 右側：プレビュー（Base64画像表示） */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <div
-                  className="prose prose-indigo max-w-none dark:prose-dark"
-                  key={markdownContent + JSON.stringify(imageMapping)}
-                >
+                <div className="prose prose-indigo max-w-none dark:prose-dark" key={markdownContent + JSON.stringify(imageMapping)}>
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
                       // 画像コンポーネントのカスタムレンダラー
+                      // src が "temp://xxxx" の場合、imageMapping から Base64データを取得して表示
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
                           typeof props.src === "string" &&
                           props.src.startsWith("temp://")
                         ) {
-                          // プレースホルダーからIDを抽出し、imageMappingからBase64データを取得
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
                           if (mapped) {
@@ -581,27 +534,16 @@ const AddArticle: React.FC = () => {
                               />
                             );
                           }
-                          return (
-                            <span style={{ color: "red" }}>
-                              画像読み込みエラー
-                            </span>
-                          );
+                          return <span style={{ color: "red" }}>画像読み込みエラー</span>;
                         }
-                        // 通常の画像の場合はそのままレンダリング
-                        return (
-                          <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />
-                        );
+                        // 通常の画像はそのままレンダリング
+                        return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
                       // コードブロックのシンタックスハイライト
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
-                          <SyntaxHighlighter
-                            style={vscDarkPlus}
-                            language={match[1]}
-                            PreTag="div"
-                            {...props}
-                          >
+                          <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
                             {String(children).replace(/\n$/, "")}
                           </SyntaxHighlighter>
                         ) : (
@@ -635,9 +577,7 @@ const AddArticle: React.FC = () => {
       {showImageModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-80">
-            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">
-              画像をアップロード
-            </h2>
+            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">画像をアップロード</h2>
             <input
               type="file"
               accept="image/*"
