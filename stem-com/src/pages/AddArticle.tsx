@@ -202,7 +202,8 @@ const AddArticle: React.FC = () => {
 
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      const [fullMatch, altText, placeholder, id] = match;
+      // 使用しない変数は破棄するため、先頭2要素は無視する
+      const [, , placeholder, id] = match;
 
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
@@ -217,7 +218,6 @@ const AddArticle: React.FC = () => {
             const original = `data:image/${imageType};base64,`;
             // GitHub へアップロードし、アップロード先のURLを取得
             const uploadedUrl = await uploadBase64ImageToGitHub(entry.base64, original);
-
             placeholderToURL[placeholder] = uploadedUrl;
           } catch (err) {
             console.error("画像アップロード失敗:", err);
