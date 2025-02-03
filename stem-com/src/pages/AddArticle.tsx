@@ -50,14 +50,12 @@ const AddArticle: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-  // Discord 関連（必要に応じて削除可能）
+  // Discord 関連（不要であれば削除してください）
   const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  const [imageMapping, setImageMapping] = useState<{
-    [key: string]: { base64: string; filename: string };
-  }>({});
+  const [imageMapping, setImageMapping] = useState<{ [key: string]: { base64: string; filename: string } }>({});
 
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -105,7 +103,6 @@ const AddArticle: React.FC = () => {
         console.error("ユーザーの取得に失敗しました:", error);
       }
     };
-
     fetchUsers();
   }, []);
 
@@ -161,8 +158,8 @@ const AddArticle: React.FC = () => {
       // プレースホルダー用の短い ID を生成
       const id = nanoid(6);
       const placeholderUrl = `temp://${id}`;
-      // テキストエリアには「画像: ファイル名」を示すプレースホルダーを挿入
-      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholderUrl})\n`;
+      // 改行を除いた形式でプレースホルダーを挿入
+      const imageMarkdown = `![画像: ${selectedImageFile.name}](${placeholderUrl})`;
       setMarkdownContent((prev) => prev + imageMarkdown);
       // 画像の Base64 データとファイル名を mapping に登録
       setImageMapping((prev) => ({ ...prev, [id]: { base64: result, filename: selectedImageFile.name } }));
@@ -181,14 +178,14 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     // プレースホルダー形式： temp://ID
-    const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9]+))\)/g;
+    const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const placeholderToURL: { [key: string]: string } = {};
 
     let match;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
       // 必要な値のみ取得（最初の2要素は破棄）
-      const [, , placeholder, id] = match;
+      const [, altText, placeholder, id] = match;
       if (placeholderToURL[placeholder]) continue;
       const uploadPromise = (async () => {
         if (imageMapping[id]) {
@@ -516,11 +513,12 @@ const AddArticle: React.FC = () => {
             {/* 右側：リアルタイムプレビュー */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
+                // key 属性に markdownContent と imageMapping を含めることで、状態変化時に再レンダリング
                 <div className="prose prose-indigo max-w-none dark:prose-dark" key={markdownContent + JSON.stringify(imageMapping)}>
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      // img 要素のカスタムレンダリング： プレースホルダーの場合は imageMapping から Base64 データを取得
+                      // img 要素のカスタムレンダリング： プレースホルダーの場合、 imageMapping から Base64 画像を取得
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
@@ -528,7 +526,7 @@ const AddArticle: React.FC = () => {
                           props.src.startsWith("temp://")
                         ) {
                           const id = props.src.replace("temp://", "");
-                          if (imageMapping[id]) {
+                          if (imageMapping[id] && imageMapping[id].base64.startsWith("data:")) {
                             return (
                               <img
                                 {...props}
@@ -537,6 +535,9 @@ const AddArticle: React.FC = () => {
                                 style={{ maxWidth: "100%" }}
                               />
                             );
+                          } else {
+                            // もし Base64 データが取得できなければ代替テキストを表示
+                            return <span>画像読み込みエラー</span>;
                           }
                         }
                         return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
