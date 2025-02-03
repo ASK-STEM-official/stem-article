@@ -50,7 +50,7 @@ const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // 以下の3つの state は render 内で利用していますが ESLint 警告が出る場合は disable コメントを追加
+  // 以下の state は将来的に利用するため、ESLint の警告を無視
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [article, setArticle] = useState<Article | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -69,9 +69,7 @@ const EditArticle: React.FC = () => {
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  const [imageMapping, setImageMapping] = useState<{
-    [key: string]: { base64: string; filename: string };
-  }>({});
+  const [imageMapping, setImageMapping] = useState<{ [key: string]: { base64: string; filename: string } }>({});
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -341,23 +339,26 @@ const EditArticle: React.FC = () => {
     try {
       let content = markdownContent;
       content = await processMarkdownContent(content);
+      // ここでは記事の更新（merge:true）ではなく、新規追加として扱っています
+      // 必要に応じて、merge: true を利用してください。
       const articleId = nanoid(10);
       const articleRef = doc(db, "articles", articleId);
-      const discordValue = introduceDiscord ? false : true;
-      await setDoc(articleRef, {
-        title,
-        content,
-        created_at: serverTimestamp(),
-        authorId: userId,
-        authorAvatarUrl: userAvatar,
-        editors: selectedEditors.map((editor) => editor.uid),
-        discord: discordValue,
-      });
+      await setDoc(
+        articleRef,
+        {
+          title,
+          content,
+          created_at: serverTimestamp(),
+          authorId: userId,
+          authorAvatarUrl: userAvatar,
+          editors: selectedEditors.map((editor) => editor.uid),
+        },
+        { merge: true }
+      );
       alert("記事を追加しました！");
       setTitle("");
       setMarkdownContent("");
       setSelectedEditors([]);
-      setIntroduceDiscord(false);
       navigate("/");
     } catch (error) {
       console.error("エラー:", error);
@@ -370,7 +371,7 @@ const EditArticle: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
-        記事を追加
+        記事を編集
       </h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
@@ -387,19 +388,6 @@ const EditArticle: React.FC = () => {
             required
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-        </div>
-
-        {/* Discord 紹介チェックボックス */}
-        <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            Discordに紹介する
-            <input
-              type="checkbox"
-              className="ml-2"
-              checked={introduceDiscord}
-              onChange={(e) => setIntroduceDiscord(e.target.checked)}
-            />
-          </label>
         </div>
 
         {/* 編集者追加 */}
