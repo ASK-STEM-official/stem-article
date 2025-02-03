@@ -1,10 +1,11 @@
 // src/pages/AddArticle.tsx
-import React, { useState, useEffect, FormEvent } from "react";
+import React, { useState, useEffect, useRef, FormEvent } from "react";
 /* 
    この記事を投稿するコンポーネント。
    Firebase Firestore にタイトルや本文、編集者などを保存し、
    Base64形式の画像をGitHubにアップロードしてURL化する。
-   なお、Markdownエディタは自作し、エディタとプレビューが常に並列表示されるように実装しています。
+   なお、Markdownエディタは自作し、ツールバー付きのGUIエディタと
+   プレビューが常に並列表示されるように実装しています。
    ※画像のアップロード処理などの仕組みは変更していません。
 */
 import {
@@ -22,7 +23,7 @@ import { useNavigate } from "react-router-dom";
 // Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 
-// Markdown を HTML に変換するための marked ライブラリをインポート
+// Markdown を HTML に変換するための marked ライブラリをインport
 import { marked } from "marked";
 
 // カスタムCSS（必要に応じてエディタ用のスタイルも追加してください）
@@ -62,6 +63,9 @@ const AddArticle: React.FC = () => {
 
   // 送信ボタンの連打防止用状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Markdownエディタ用のテキストエリア参照（カーソル位置制御用）
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // --------------------------------------------
   // ダークモードの変更を監視する useEffect
@@ -152,6 +156,77 @@ const AddArticle: React.FC = () => {
   };
 
   // --------------------------------------------
+  // テキストエリアのカーソル位置に文字列を挿入する関数
+  // --------------------------------------------
+  const insertAtCursor = (textToInsert: string) => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = markdownContent.substring(0, start);
+      const after = markdownContent.substring(end);
+      const newText = before + textToInsert + after;
+      setMarkdownContent(newText);
+      // カーソル位置を調整
+      setTimeout(() => {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + textToInsert.length;
+      }, 0);
+    } else {
+      setMarkdownContent(markdownContent + textToInsert);
+    }
+  };
+
+  // --------------------------------------------
+  // ツールバー用各種挿入関数
+  // --------------------------------------------
+  const handleBold = () => {
+    // 太字: **テキスト**
+    insertAtCursor("**太字**");
+  };
+
+  const handleItalic = () => {
+    // 斜体: _テキスト_
+    insertAtCursor("_斜体_");
+  };
+
+  const handleLink = () => {
+    // リンク: [リンクテキスト](URL)
+    insertAtCursor("[リンクテキスト](https://example.com)");
+  };
+
+  const handleImage = () => {
+    // 画像: ![代替テキスト](画像URL)
+    insertAtCursor("![代替テキスト](https://example.com/image.jpg)");
+  };
+
+  const handleTable = () => {
+    // 簡単な表のテンプレート
+    const tableSnippet =
+`| 見出し1 | 見出し2 | 見出し3 |
+| --- | --- | --- |
+| データ1 | データ2 | データ3 |
+
+`;
+    insertAtCursor(tableSnippet);
+  };
+
+  const handleHorizontalRule = () => {
+    // 水平線
+    insertAtCursor("\n---\n");
+  };
+
+  const handleColoredText = () => {
+    // HTMLタグで色指定（Markdown内でHTMLが利用可能な場合）
+    insertAtCursor("<span style='color: red;'>赤色のテキスト</span>");
+  };
+
+  const handleCodeBlock = () => {
+    // コードブロック
+    insertAtCursor("\n```\nコード例\n```\n");
+  };
+
+  // --------------------------------------------
   // フォーム送信処理
   // --------------------------------------------
   const handleSubmit = async (e: FormEvent) => {
@@ -159,17 +234,16 @@ const AddArticle: React.FC = () => {
     if (isSubmitting) return; // 連打防止
     setIsSubmitting(true);
     try {
-      // 自作エディタから Markdown コンテンツを取得
+      // 自作エディタからMarkdownコンテンツを取得
       let content = markdownContent;
-
-      // Markdown 内の Base64 画像を GitHub にアップロードして URL を置換
+      // Markdown内のBase64画像をGitHubにアップロードしてURLを置換
       content = await processMarkdownContent(content);
 
-      // Firestore に記事を保存
+      // Firestoreに記事を保存
       const articleId = nanoid(10); // ユニークな記事ID生成
       const articleRef = doc(db, "articles", articleId);
 
-      // チェックボックスの状態により discord フィールドの値を設定
+      // チェックボックスの状態によりdiscordフィールドの値を設定
       const discordValue = introduceDiscord ? false : true;
 
       await setDoc(articleRef, {
@@ -179,7 +253,7 @@ const AddArticle: React.FC = () => {
         authorId: userId, // 正しいユーザーIDを設定
         authorAvatarUrl: userAvatar,
         editors: selectedEditors.map((editor) => editor.uid),
-        // ======== 追加: discord フィールド（Boolean） ========
+        // ======== 追加: discordフィールド（Boolean） ========
         discord: discordValue,
       });
 
@@ -198,7 +272,7 @@ const AddArticle: React.FC = () => {
   };
 
   // --------------------------------------------
-  // Markdown 内の Base64 画像を GitHub にアップロードして URL を置換する関数
+  // Markdown内のBase64画像をGitHubにアップロードしてURLを置換する関数
   // --------------------------------------------
   /**
    * Markdownコンテンツ内のBase64画像を検出し、GitHubにアップロードしてURLを置換する関数
@@ -208,78 +282,52 @@ const AddArticle: React.FC = () => {
    */
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     // Base64形式の画像を検出する正規表現
-    const base64ImageRegex =
-      /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
-
+    const base64ImageRegex = /!\[([^\]]*)\]\((data:image\/[a-zA-Z]+;base64,([^)]+))\)/g;
     // 画像アップロードのプロミスを格納する配列
     const uploadPromises: Promise<void>[] = [];
-
     // マッチしたBase64画像とGitHubのURLの対応を保存するオブジェクト
     const base64ToGitHubURLMap: { [key: string]: string } = {};
 
     let match;
     while ((match = base64ImageRegex.exec(markdown)) !== null) {
-      const [
-        fullMatch,
-        /* altText */,
-        dataUrl,
-        base64Data,
-      ] = match;
+      const [fullMatch, /* altText */, dataUrl, base64Data] = match;
+      // 同じ画像を複数回アップロードしない
+      if (base64ToGitHubURLMap[dataUrl]) continue;
 
-      // 同じ画像を複数回アップロードしないようにする
-      if (base64ToGitHubURLMap[dataUrl]) {
-        continue;
-      }
-
-      // 画像をアップロードするプロミスを作成
       const uploadPromise = (async () => {
         try {
-          const imageUrl = await uploadBase64ImageToGitHub(
-            base64Data,
-            fullMatch
-          );
+          const imageUrl = await uploadBase64ImageToGitHub(base64Data, fullMatch);
           base64ToGitHubURLMap[dataUrl] = imageUrl;
         } catch (error) {
           console.error("画像のアップロードに失敗しました:", error);
           alert("画像のアップロードに失敗しました。");
-          // 投稿を中断する場合はエラーをスロー
           throw error;
         }
       })();
-
       uploadPromises.push(uploadPromise);
     }
 
-    // すべての画像アップロードが完了するまで待機
     await Promise.all(uploadPromises);
 
-    // Markdownコンテンツ内のBase64画像URLをGitHubのURLに置換
-    const updatedMarkdown = markdown.replace(
-      base64ImageRegex,
-      (match, alt, dataUrl) => {
-        const githubUrl = base64ToGitHubURLMap[dataUrl];
-        if (githubUrl) {
-          return `![${alt}](${githubUrl})`;
-        }
-        // アップロードに失敗した場合は元のBase64画像を保持
-        return match;
-      }
-    );
+    // Markdown内のBase64画像URLをGitHubのURLに置換
+    const updatedMarkdown = markdown.replace(base64ImageRegex, (match, alt, dataUrl) => {
+      const githubUrl = base64ToGitHubURLMap[dataUrl];
+      return githubUrl ? `![${alt}](${githubUrl})` : match;
+    });
 
     return updatedMarkdown;
   };
 
   // --------------------------------------------
-  // Firestore から GitHubトークン を取得する関数
+  // FirestoreからGitHubトークンを取得する関数
   // --------------------------------------------
   async function fetchGithubToken() {
     try {
       const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG"); // 正しいドキュメントIDを指定
       const docSnap = await getDoc(docRef);
-
       if (docSnap.exists()) {
         const data = docSnap.data();
-        return data.key; // "key" フィールドの値を返す
+        return data.key; // "key"フィールドの値を返す
       } else {
         console.error("Document not found!");
         return null;
@@ -291,7 +339,7 @@ const AddArticle: React.FC = () => {
   }
 
   // --------------------------------------------
-  // GitHub に Base64画像をアップロードする関数
+  // GitHubにBase64画像をアップロードする関数
   // --------------------------------------------
   /**
    * Base64形式の画像データをGitHubにアップロードし、画像のURLを返す関数
@@ -306,26 +354,19 @@ const AddArticle: React.FC = () => {
   ): Promise<string> => {
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
     const GITHUB_TOKEN = await fetchGithubToken();
-
     // 画像の種類を判別する
     const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
-    let imageType = "png"; // デフォルトはPNG
+    let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
     }
-
-    // ユニークなファイル名を生成
     const id = nanoid(10); // 10文字のユニークID
     const fileName = `${id}.${imageType}`;
     const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
-
-    // ファイルアップロード用のリクエストペイロードを作成
     const payload = {
       message: `Add image: ${fileName}`,
       content: base64Data,
     };
-
-    // GitHub に画像をアップロードするリクエストを送信
     const response = await fetch(fileApiUrl, {
       method: "PUT",
       headers: {
@@ -334,13 +375,10 @@ const AddArticle: React.FC = () => {
       },
       body: JSON.stringify(payload),
     });
-
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message);
     }
-
-    // GitHub 上の画像URLを構築して返す
     const imageUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     return imageUrl;
   };
@@ -350,15 +388,11 @@ const AddArticle: React.FC = () => {
   // --------------------------------------------
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
-        記事を追加
-      </h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
-            タイトル
-          </label>
+          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">タイトル</label>
           <input
             type="text"
             id="title"
@@ -374,7 +408,6 @@ const AddArticle: React.FC = () => {
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
-            {/* チェックを入れると firestore の "discord" フィールドが false で投稿される */}
             <input
               type="checkbox"
               className="ml-2"
@@ -389,9 +422,7 @@ const AddArticle: React.FC = () => {
 
         {/* 編集者追加 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            編集者を追加
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
           <input
             type="text"
             placeholder="編集者を検索"
@@ -399,15 +430,14 @@ const AddArticle: React.FC = () => {
             onChange={(e) => setEditorSearch(e.target.value)}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          {/* 編集者候補リスト */}
           {editorSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
                 .filter(
                   (user) =>
                     user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
-                    user.uid !== userId && // 自分自身は除外
-                    !selectedEditors.find((editor) => editor.uid === user.uid) // 既に選択済みの編集者は除外
+                    user.uid !== userId &&
+                    !selectedEditors.find((editor) => editor.uid === user.uid)
                 )
                 .map((user) => (
                   <li
@@ -421,9 +451,7 @@ const AddArticle: React.FC = () => {
                         alt={user.displayName}
                         className="w-6 h-6 rounded-full mr-2"
                       />
-                      <span className="text-gray-800 dark:text-gray-100">
-                        {user.displayName}
-                      </span>
+                      <span className="text-gray-800 dark:text-gray-100">{user.displayName}</span>
                     </div>
                   </li>
                 ))}
@@ -433,9 +461,7 @@ const AddArticle: React.FC = () => {
                   user.uid !== userId &&
                   !selectedEditors.find((editor) => editor.uid === user.uid)
               ).length === 0 && (
-                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">
-                  該当するユーザーが見つかりません。
-                </li>
+                <li className="px-3 py-2 text-gray-500 dark:text-gray-400">該当するユーザーが見つかりません。</li>
               )}
             </ul>
           )}
@@ -444,9 +470,7 @@ const AddArticle: React.FC = () => {
         {/* 選択された編集者の表示 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
-            <label className="block text-gray-700 dark:text-gray-300 mb-2">
-              現在の編集者
-            </label>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
             <ul className="space-y-2">
               {selectedEditors.map((editor) => (
                 <li
@@ -459,9 +483,7 @@ const AddArticle: React.FC = () => {
                       alt={editor.displayName}
                       className="w-6 h-6 rounded-full mr-2"
                     />
-                    <span className="text-gray-800 dark:text-gray-100">
-                      {editor.displayName}
-                    </span>
+                    <span className="text-gray-800 dark:text-gray-100">{editor.displayName}</span>
                   </div>
                   <button
                     type="button"
@@ -476,20 +498,35 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* 自作の Markdown エディタ（常にエディタとプレビューを並列表示） */}
-        <div className="form-group grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 編集用テキストエリア */}
-          <textarea
-            value={markdownContent}
-            onChange={(e) => setMarkdownContent(e.target.value)}
-            className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="ここにMarkdownを入力"
-          />
-          {/* プレビュ―パネル：Markdown を HTML に変換して表示 */}
-          <div
-            className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white overflow-auto markdown-preview"
-            dangerouslySetInnerHTML={{ __html: marked(markdownContent) }}
-          />
+        {/* 自作の Markdown エディタ（ツールバー付き・エディタとプレビューを並列表示） */}
+        <div className="form-group">
+          {/* ツールバー */}
+          <div className="toolbar mb-2">
+            <button type="button" onClick={handleBold} className="btn-toolbar">太字</button>
+            <button type="button" onClick={handleItalic} className="btn-toolbar">斜体</button>
+            <button type="button" onClick={handleLink} className="btn-toolbar">リンク</button>
+            <button type="button" onClick={handleImage} className="btn-toolbar">画像</button>
+            <button type="button" onClick={handleTable} className="btn-toolbar">表</button>
+            <button type="button" onClick={handleHorizontalRule} className="btn-toolbar">水平線</button>
+            <button type="button" onClick={handleColoredText} className="btn-toolbar">色付きテキスト</button>
+            <button type="button" onClick={handleCodeBlock} className="btn-toolbar">コードブロック</button>
+          </div>
+          {/* エディタとプレビューをグリッド表示 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 編集用テキストエリア */}
+            <textarea
+              ref={textareaRef}
+              value={markdownContent}
+              onChange={(e) => setMarkdownContent(e.target.value)}
+              className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="ここにMarkdownを入力"
+            />
+            {/* プレビュ―パネル：Markdown を HTML に変換して表示 */}
+            <div
+              className="w-full h-64 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white overflow-auto markdown-preview"
+              dangerouslySetInnerHTML={{ __html: marked(markdownContent) }}
+            />
+          </div>
         </div>
 
         {/* 投稿ボタン（連打防止機能付き） */}
