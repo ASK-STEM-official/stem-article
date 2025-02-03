@@ -51,7 +51,7 @@ const AddArticle: React.FC = () => {
   const auth = getAuth();
 
   // ダークモードの状態管理
-  //const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
   // 全ユーザーリスト、選択された編集者、編集者検索用の状態管理
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
