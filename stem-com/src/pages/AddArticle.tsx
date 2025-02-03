@@ -193,7 +193,6 @@ const AddArticle: React.FC = () => {
 
   // ----------------------------
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
-  // ----------------------------
   // ※最終的な記事データ保存前に実行され、"temp://xxx" プレースホルダーを実際のアップロード先URLに置換する
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
@@ -515,7 +514,7 @@ const AddArticle: React.FC = () => {
                     remarkPlugins={[remarkGfm]}
                     components={{
                       // 画像コンポーネントのカスタムレンダラー
-                      // src が "temp://xxxx" の場合、imageMapping から Base64データを取得して表示
+                      // src が "temp://xxxx" の場合、imageMapping から Base64データを取得して表示する
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
@@ -524,6 +523,7 @@ const AddArticle: React.FC = () => {
                         ) {
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
+                          console.log("Custom image renderer: id =", id, "mapped =", mapped);
                           if (mapped) {
                             return (
                               <img
@@ -534,7 +534,7 @@ const AddArticle: React.FC = () => {
                               />
                             );
                           }
-                          return <span style={{ color: "red" }}>画像読み込みエラー</span>;
+                          return <span style={{ color: "red" }}>画像読み込みエラー: {id}</span>;
                         }
                         // 通常の画像はそのままレンダリング
                         return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
