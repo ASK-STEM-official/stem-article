@@ -19,7 +19,8 @@ import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
 // HTML をそのままレンダリングするための rehype プラグイン（npm install rehype-raw を実施してください）
-import rehypeRaw from "rehype-raw";
+//import rehypeRaw from "rehype-raw";
+const rehypeRaw = require("rehype-raw");
 // カスタムCSS のインポート
 import "../AddArticle.css";
 
