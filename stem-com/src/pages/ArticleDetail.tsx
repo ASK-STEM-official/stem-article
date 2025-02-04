@@ -7,10 +7,10 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
-import { Calendar, User, Edit } from 'lucide-react'; // Edit アイコンを追加
+import { Calendar, User, Edit } from 'lucide-react'; 
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Article } from '../types/Article'; // 型定義のインポート
+import { Article } from '../types/Article'; 
 import Editors from "../components/Editors.tsx"; // 編集者表示コンポーネントのインポート
 
 // Firebase Authentication
