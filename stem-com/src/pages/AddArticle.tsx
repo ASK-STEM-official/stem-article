@@ -1,3 +1,5 @@
+// src/pages/AddArticle.tsx
+
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
 import {
@@ -17,11 +19,34 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
+// rehype-sanitize のインポートと defaultSchema の読み込み
+// ※もしサニタイズで data URI が削除される場合は、以下の rehypePlugins 部分を一旦コメントアウトしてください
+import rehypeSanitize from "rehype-sanitize";
+import { defaultSchema } from "hast-util-sanitize";
 // コードブロックのシンタックスハイライト用コンポーネント
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 // カスタムCSS のインポート
 import "../AddArticle.css";
+
+// カスタムサニタイズスキーマの定義
+// 下記の設定で、img 要素の src, alt, style 属性を許可し、src プロトコルとして "http", "https", "mailto", "tel", "data" を許可する
+const customSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    img: [
+      ...(defaultSchema.attributes?.img || []),
+      ["src"],
+      ["alt"],
+      ["style"],
+    ],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ["http", "https", "mailto", "tel", "data"],
+  },
+};
 
 // ユーザー情報の型定義
 interface UserData {
@@ -55,7 +80,7 @@ const AddArticle: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64画像データ・ファイル名を紐付ける
+  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64 画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
@@ -126,18 +151,15 @@ const AddArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // テキストエリアのカーソル位置にテキストを挿入する処理
+  // テキストエディタのカーソル位置にテキストを挿入する処理
   // ----------------------------
   const insertAtCursor = (text: string) => {
     if (!textareaRef.current) return;
-
     const { selectionStart, selectionEnd } = textareaRef.current;
     const before = markdownContent.slice(0, selectionStart);
     const after = markdownContent.slice(selectionEnd);
-
     const updated = before + text + after;
     setMarkdownContent(updated);
-
     // 挿入後のカーソル位置を調整
     setTimeout(() => {
       if (textareaRef.current) {
@@ -151,16 +173,14 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   // 画像アップロードモーダル内での処理
   // ----------------------------
-  // 画像ファイルを読み込み、Base64形式に変換後、Markdown に "temp://xxx" プレースホルダー付き記法を挿入
+  // 画像ファイルを読み込み、Base64 形式に変換後、Markdown に "temp://xxx" プレースホルダー付き記法を挿入
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
       return;
     }
     if (isUploading) return;
-
     setIsUploading(true);
-
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
@@ -169,29 +189,25 @@ const AddArticle: React.FC = () => {
         setIsUploading(false);
         return;
       }
-      // ※余分な空白を取り除く
+      // 余分な空白を除去して設定
       const base64Data = result.trim();
       const id = nanoid(6); // ユニークなID生成
       const placeholder = `temp://${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
       console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
-
-      // 改行ありのMarkdown記法で画像を挿入
-      // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側で Base64 画像に置換される
+      // 改行ありの Markdown 記法で画像を挿入（エディタ側はプレースホルダーで表示）
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => {
         const newContent = prev + imageMarkdown;
         console.log("Debug: Updated markdownContent:", newContent);
         return newContent;
       });
-
       // imageMapping に画像の Base64 データとファイル名を登録
       setImageMapping((prev) => {
         const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
         console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
         return newMapping;
       });
-
       setShowImageModal(false);
       setSelectedImageFile(null);
       setIsUploading(false);
@@ -205,18 +221,16 @@ const AddArticle: React.FC = () => {
 
   // ----------------------------
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
-  // ※最終的な記事データ保存前に実行され、"temp://xxx" プレースホルダーを実際のアップロード先URLに置換する
+  // ※最終的な記事データ保存前に実行され、"temp://xxx" プレースホルダーを実際のアップロード先 URL に置換する
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const placeholderToURL: { [key: string]: string } = {};
-
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 使用しない変数は破棄するため、先頭2要素は無視する
+      // 先頭2要素は無視
       const [, , placeholder, id] = match;
       console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
-
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
           try {
@@ -240,7 +254,6 @@ const AddArticle: React.FC = () => {
         uploadPromises.push(p);
       }
     }
-
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
@@ -283,26 +296,21 @@ const AddArticle: React.FC = () => {
   ): Promise<string> => {
     const token = await fetchGithubToken();
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
-
     // 画像タイプを抽出
     const imageTypeMatch = originalHead.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
     }
-
     const uniqueId = nanoid(10);
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
-
-    // base64Data に "data:image/xxx;base64," が含まれる場合は除去し、純粋なBase64文字列にする
+    // "data:image/xxx;base64," を除去して純粋な Base64 文字列にする
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
-
     const payload = {
       message: `Add image: ${fileName}`,
       content: pureBase64,
     };
-
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
@@ -311,12 +319,10 @@ const AddArticle: React.FC = () => {
       },
       body: JSON.stringify(payload),
     });
-
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.message);
     }
-
     const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     console.log("Debug: GitHub uploaded URL:", uploadedUrl);
     return uploadedUrl;
@@ -328,17 +334,14 @@ const AddArticle: React.FC = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-
     setIsSubmitting(true);
     try {
       let content = markdownContent;
       // Markdown の画像プレースホルダーをアップロードして置換する
       content = await processMarkdownContent(content);
-
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
       const discordFlag = introduceDiscord ? false : true; // 環境に合わせて
-
       await setDoc(docRef, {
         title,
         content,
@@ -348,13 +351,11 @@ const AddArticle: React.FC = () => {
         editors: selectedEditors.map((ed) => ed.uid),
         discord: discordFlag,
       });
-
       alert("記事を追加しました！");
       setTitle("");
       setMarkdownContent("");
       setSelectedEditors([]);
       setIntroduceDiscord(false);
-
       navigate("/");
     } catch (err) {
       console.error("エラー:", err);
@@ -367,7 +368,6 @@ const AddArticle: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
-
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
@@ -382,8 +382,7 @@ const AddArticle: React.FC = () => {
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-
-        {/* Discordチェックボックス（不要なら削除） */}
+        {/* Discord チェックボックス（不要なら削除） */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
@@ -395,7 +394,6 @@ const AddArticle: React.FC = () => {
             />
           </label>
         </div>
-
         {/* 編集者追加 */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
@@ -406,7 +404,6 @@ const AddArticle: React.FC = () => {
             onChange={(e) => setEditorSearch(e.target.value)}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-
           {editorSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
@@ -445,7 +442,6 @@ const AddArticle: React.FC = () => {
             </ul>
           )}
         </div>
-
         {/* 選択された編集者 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
@@ -472,7 +468,6 @@ const AddArticle: React.FC = () => {
             </ul>
           </div>
         )}
-
         {/* Markdown エディタ部分 */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">内容 (Markdown)</label>
@@ -525,13 +520,14 @@ const AddArticle: React.FC = () => {
               {markdownContent.trim() ? (
                 <div
                   className="prose prose-indigo max-w-none dark:prose-dark"
-                  // key に markdownContent と imageMapping の内容を付与することで、更新時に再レンダリングさせる
+                  // key に markdownContent と imageMapping を付与して更新時に再レンダリングさせる
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[[rehypeSanitize, customSchema]]}
                     components={{
-                      // 画像コンポーネントのカスタムレンダラー
+                      // カスタム画像レンダラー：
                       // src が "temp://xxxx" の場合、imageMapping から Base64 データを取得して表示する
                       img: ({ node, ...props }) => {
                         if (
