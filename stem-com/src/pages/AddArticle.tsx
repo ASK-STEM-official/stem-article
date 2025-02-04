@@ -171,11 +171,12 @@ const AddArticle: React.FC = () => {
         setIsUploading(false);
         return;
       }
-      const base64Data = result;
+      // ※余分な空白を取り除く
+      const base64Data = result.trim();
       const id = nanoid(6); // ユニークなID生成
       const placeholder = `temp://${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
-      console.log("Debug: Base64 data:", base64Data.slice(0, 50)); // 最初の50文字を表示
+      console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
 
       // 改行ありのMarkdown記法で画像を挿入
       // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側で Base64 画像に置換される
@@ -526,7 +527,7 @@ const AddArticle: React.FC = () => {
               {markdownContent.trim() ? (
                 <div
                   className="prose prose-indigo max-w-none dark:prose-dark"
-                  // key に markdownContent と imageMapping の内容を付与することで、imageMapping 更新時にも再レンダリングさせる
+                  // key に markdownContent と imageMapping の内容を付与することで、更新時に再レンダリングさせる
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
@@ -544,7 +545,7 @@ const AddArticle: React.FC = () => {
                           const mapped = imageMapping[id];
                           console.log("Debug: Custom image renderer - id:", id, "mapped:", mapped);
                           if (mapped && mapped.base64.trim() !== "") {
-                            console.log("Debug: Rendering base64 image:", mapped.base64.slice(0, 50));
+                            console.log("Debug: Rendering base64 image (先頭50文字):", mapped.base64.slice(0, 50));
                             return (
                               <img
                                 {...props}
