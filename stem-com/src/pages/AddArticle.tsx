@@ -531,6 +531,7 @@ const AddArticle: React.FC = () => {
                     components={{
                       // カスタム画像レンダラー
                       img: ({ node, ...props }) => {
+                        // 画像の src が temp:// で始まる場合、imageMapping から Base64 を取得する
                         if (
                           props.src &&
                           typeof props.src === "string" &&
@@ -540,9 +541,9 @@ const AddArticle: React.FC = () => {
                           const mapped = imageMapping[id];
                           console.log("Debug: Custom image renderer - id:", id, "mapping:", mapped);
                           if (mapped && mapped.base64.trim() !== "") {
+                            // 明示的に必要な属性のみ設定する
                             return (
                               <img
-                                {...props}
                                 src={mapped.base64}
                                 alt={props.alt || `画像: ${mapped.filename}`}
                                 style={{ maxWidth: "100%" }}
@@ -551,7 +552,8 @@ const AddArticle: React.FC = () => {
                           }
                           return <span style={{ color: "red" }}>画像読み込みエラー: {id}</span>;
                         }
-                        return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
+                        // 通常の画像はそのままレンダリング
+                        return <img src={props.src} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
                       // コードブロックレンダラー
                       code({ node, inline, className, children, ...props }) {
