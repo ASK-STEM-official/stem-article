@@ -20,9 +20,25 @@ import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
 
-// 以下、rehype-sanitize の導入はコメントアウト（data URI をそのまま使用するため）
+// 以下、rehype-sanitize を使用する場合の記述（今回は Base64 data URI をそのまま利用するためコメントアウト）
 // import rehypeSanitize from "rehype-sanitize";
 // import { defaultSchema } from "hast-util-sanitize";
+// const customSchema = {
+//   ...defaultSchema,
+//   attributes: {
+//     ...defaultSchema.attributes,
+//     img: [
+//       ...(defaultSchema.attributes?.img || []),
+//       ["src"],
+//       ["alt"],
+//       ["style"],
+//     ],
+//   },
+//   protocols: {
+//     ...defaultSchema.protocols,
+//     src: ["http", "https", "mailto", "tel", "data"],
+//   },
+// };
 
 // コードブロックのシンタックスハイライト用コンポーネント
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -74,7 +90,7 @@ const AddArticle: React.FC = () => {
   const navigate = useNavigate();
   const auth = getAuth();
 
-  // テキストエディア参照（Markdown入力エリア用）
+  // テキストエディタ参照（Markdown入力エリア用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -497,7 +513,7 @@ const AddArticle: React.FC = () => {
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
-                    // data URI が削除される場合は rehypePlugins をコメントアウトしてください
+                    // データURI が削除される場合は rehypePlugins の設定をコメントアウトしてください
                     rehypePlugins={[[/* rehypeSanitize, customSchema */]]}
                     components={{
                       img: ({ node, ...props }) => {
@@ -527,8 +543,13 @@ const AddArticle: React.FC = () => {
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
-                          <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
-                            {String(children).replace(/\n$/, "")}
+                          <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={match[1]}
+                            PreTag="div"
+                            {...props}
+                          >
+                            {children ? String(children).replace(/\n$/, "") : ""}
                           </SyntaxHighlighter>
                         ) : (
                           <code className={className} {...props}>
