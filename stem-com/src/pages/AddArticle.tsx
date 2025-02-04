@@ -153,7 +153,7 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   // 画像アップロードモーダル内での処理
   // ----------------------------
-  // 画像ファイルを読み込み、Base64形式に変換後、Markdownに "temp://xxx" プレースホルダー付き記法を挿入
+  // 画像ファイルを読み込み、Base64形式に変換後、Markdown に "temp://xxx" プレースホルダー付き記法を挿入
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
@@ -165,13 +165,20 @@ const AddArticle: React.FC = () => {
 
     const reader = new FileReader();
     reader.onload = () => {
-      const base64Data = reader.result as string;
+      const result = reader.result;
+      if (!result || typeof result !== "string" || result.trim() === "") {
+        alert("画像の読み込みに失敗しました。ファイルが無効です。");
+        setIsUploading(false);
+        return;
+      }
+      const base64Data = result;
       const id = nanoid(6); // ユニークなID生成
       const placeholder = `temp://${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
+      console.log("Debug: Base64 data:", base64Data.slice(0, 50)); // 最初の50文字を表示
 
       // 改行ありのMarkdown記法で画像を挿入
-      // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側でBase64画像に置換される
+      // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側で Base64 画像に置換される
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => {
         const newContent = prev + imageMarkdown;
@@ -179,7 +186,7 @@ const AddArticle: React.FC = () => {
         return newContent;
       });
 
-      // imageMapping に画像のBase64データとファイル名を登録
+      // imageMapping に画像の Base64 データとファイル名を登録
       setImageMapping((prev) => {
         const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
         console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
@@ -526,7 +533,7 @@ const AddArticle: React.FC = () => {
                     remarkPlugins={[remarkGfm]}
                     components={{
                       // 画像コンポーネントのカスタムレンダラー
-                      // src が "temp://xxxx" の場合、imageMapping から Base64データを取得して表示する
+                      // src が "temp://xxxx" の場合、imageMapping から Base64 データを取得して表示する
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
@@ -536,8 +543,8 @@ const AddArticle: React.FC = () => {
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
                           console.log("Debug: Custom image renderer - id:", id, "mapped:", mapped);
-                          if (mapped) {
-                            console.log("Debug: Rendering base64 image:", mapped.base64);
+                          if (mapped && mapped.base64.trim() !== "") {
+                            console.log("Debug: Rendering base64 image:", mapped.base64.slice(0, 50));
                             return (
                               <img
                                 {...props}
