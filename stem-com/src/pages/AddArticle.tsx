@@ -70,7 +70,7 @@ const AddArticle: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64画像データ・ファイル名を紐付ける
+  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64 画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
@@ -185,14 +185,14 @@ const AddArticle: React.FC = () => {
       const placeholder = `temp://${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
       console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
-      // 改行ありの Markdown 記法で画像を挿入
+      // 改行ありの Markdown 記法で画像を挿入（エディタ側はプレースホルダーで表示）
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => {
         const newContent = prev + imageMarkdown;
         console.log("Debug: Updated markdownContent:", newContent);
         return newContent;
       });
-      // imageMapping に Base64 データとファイル名を登録
+      // imageMapping に画像の Base64 データとファイル名を登録
       setImageMapping((prev) => {
         const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
         console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
@@ -375,7 +375,7 @@ const AddArticle: React.FC = () => {
         {/* Discord チェックボックス（不要なら削除） */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            Discord に紹介する
+            Discordに紹介する
             <input
               type="checkbox"
               className="ml-2"
@@ -510,14 +510,15 @@ const AddArticle: React.FC = () => {
               {markdownContent.trim() ? (
                 <div
                   className="prose prose-indigo max-w-none dark:prose-dark"
-                  // key に markdownContent と imageMapping を付与して更新時に再レンダリングさせる
+                  // key に markdownContent と imageMapping を付与して、更新時に再レンダリングさせる
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[[rehypeSanitize, customSchema]]}
                     components={{
-                      // カスタム画像レンダラー：src が "temp://xxxx" の場合、imageMapping から Base64 を取得
+                      // カスタム画像レンダラー
+                      // src が "temp://xxxx" の場合、imageMapping から Base64 データを取得して表示
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
