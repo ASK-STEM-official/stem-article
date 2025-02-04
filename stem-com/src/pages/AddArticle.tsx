@@ -29,12 +29,22 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "../AddArticle.css";
 
 // カスタムサニタイズスキーマの定義
-// defaultSchema をベースに、img 要素の src 属性で "data" プロトコルを許可するように設定
+// 以下の設定で、img 要素の src 属性に "data" プロトコルを許可し、属性として src, alt, style を明示的に許可する
 const customSchema = {
   ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    img: [
+      ...(defaultSchema.attributes?.img || []),
+      // 必要な属性を明示的に指定
+      ["src"],
+      ["alt"],
+      ["style"],
+    ],
+  },
   protocols: {
     ...defaultSchema.protocols,
-    src: [...(defaultSchema.protocols.src || []), "data"],
+    src: ["http", "https", "mailto", "tel", "data"],
   },
 };
 
@@ -70,7 +80,7 @@ const AddArticle: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64 画像データ・ファイル名を紐付ける
+  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
@@ -510,14 +520,14 @@ const AddArticle: React.FC = () => {
               {markdownContent.trim() ? (
                 <div
                   className="prose prose-indigo max-w-none dark:prose-dark"
-                  // key に markdownContent と imageMapping を付与して、更新時に再レンダリングさせる
+                  // key に markdownContent と imageMapping を付与して更新時に再レンダリングさせる
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[[rehypeSanitize, customSchema]]}
                     components={{
-                      // カスタム画像レンダラー
+                      // カスタム画像レンダラー：
                       // src が "temp://xxxx" の場合、imageMapping から Base64 データを取得して表示
                       img: ({ node, ...props }) => {
                         if (
