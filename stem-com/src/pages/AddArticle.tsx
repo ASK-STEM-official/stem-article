@@ -29,7 +29,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "../AddArticle.css";
 
 // カスタムサニタイズスキーマの定義
-// defaultSchema をベースに、img の src 属性に "data" プロトコルを追加
+// defaultSchema をベースに、img 要素の src 属性で "data" プロトコルを許可するように設定
 const customSchema = {
   ...defaultSchema,
   protocols: {
