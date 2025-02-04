@@ -19,37 +19,16 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// rehype-sanitize のインポートと defaultSchema の読み込み
-// ※以下の rehypePlugins を使用すると、data URI が除去される場合があるため、動作確認のため一旦コメントアウトしてください。
+
+// 以下、rehype-sanitize の導入はコメントアウト（data URI をそのまま使用するため）
 // import rehypeSanitize from "rehype-sanitize";
 // import { defaultSchema } from "hast-util-sanitize";
+
 // コードブロックのシンタックスハイライト用コンポーネント
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 // カスタムCSS のインポート
 import "../AddArticle.css";
-
-// 【※rehype-sanitize 使用時】
-// カスタムサニタイズスキーマの定義
-// defaultSchema をベースに、img 要素の src, alt, style 属性を許可し、src プロトコルとして "data" も追加
-/*
-const customSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    img: [
-      ...(defaultSchema.attributes?.img || []),
-      ["src"],
-      ["alt"],
-      ["style"],
-    ],
-  },
-  protocols: {
-    ...defaultSchema.protocols,
-    src: ["http", "https", "mailto", "tel", "data"],
-  },
-};
-*/
 
 // ユーザー情報の型定義
 interface UserData {
@@ -95,7 +74,7 @@ const AddArticle: React.FC = () => {
   const navigate = useNavigate();
   const auth = getAuth();
 
-  // テキストエリア参照（Markdown入力エリア用）
+  // テキストエディア参照（Markdown入力エリア用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ----------------------------
@@ -376,7 +355,7 @@ const AddArticle: React.FC = () => {
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        {/* Discord チェックボックス（不要なら削除） */}
+        {/* Discord チェックボックス */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
@@ -518,8 +497,8 @@ const AddArticle: React.FC = () => {
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
-                    // もしサニタイズによって data URI が除去される場合は以下の rehypePlugins をコメントアウトしてください
-                    rehypePlugins={[[rehypeSanitize, customSchema]]}
+                    // data URI が削除される場合は rehypePlugins をコメントアウトしてください
+                    rehypePlugins={[[/* rehypeSanitize, customSchema */]]}
                     components={{
                       img: ({ node, ...props }) => {
                         if (
