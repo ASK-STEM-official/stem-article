@@ -187,7 +187,7 @@ const AddArticle: React.FC = () => {
       // imageMapping に画像データを登録
       setImageMapping((prev) => {
         const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
-        console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
+        console.log("Debug: Updated imageMapping in handleUploadImage:", JSON.stringify(newMapping));
         return newMapping;
       });
 
@@ -538,9 +538,8 @@ const AddArticle: React.FC = () => {
                         ) {
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
-                          console.log("Debug: Custom image renderer - id:", id, "mapped:", mapped);
+                          console.log("Debug: Custom image renderer - id:", id, "mapping:", mapped);
                           if (mapped && mapped.base64.trim() !== "") {
-                            console.log("Debug: Rendering base64 image (先頭50文字):", mapped.base64.slice(0, 50));
                             return (
                               <img
                                 {...props}
