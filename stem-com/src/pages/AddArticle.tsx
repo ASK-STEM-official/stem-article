@@ -1,5 +1,3 @@
-// src/pages/AddArticle.tsx
-
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
 import {
