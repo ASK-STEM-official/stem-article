@@ -29,14 +29,14 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "../AddArticle.css";
 
 // カスタムサニタイズスキーマの定義
-// 以下の設定で、img 要素の src 属性に "data" プロトコルを許可し、属性として src, alt, style を明示的に許可する
+// img 要素で src, alt, style 属性を許可し、src には "data" プロトコルも許可する
 const customSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
     img: [
+      // すでに許可されている属性があればそれに追加
       ...(defaultSchema.attributes?.img || []),
-      // 必要な属性を明示的に指定
       ["src"],
       ["alt"],
       ["style"],
@@ -80,7 +80,7 @@ const AddArticle: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64画像データ・ファイル名を紐付ける
+  // ※アップロード時に生成した "temp://xxxx" のIDと、Base64 画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
