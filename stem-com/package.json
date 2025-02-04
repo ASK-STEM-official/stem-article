@@ -5,9 +5,6 @@
   "homepage": "/stem-article",
   "dependencies": {
     "@tailwindcss/forms": "^0.5.9",
-    "@toast-ui/editor": "^3.2.2",
-    "@toast-ui/editor-plugin-color-syntax": "^3.1.0",
-    "@toast-ui/react-editor": "^3.2.3",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "date-fns": "^3.3.1",
