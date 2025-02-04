@@ -20,7 +20,7 @@ import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
 
-// 以下、rehype-sanitize を使用する場合の記述（今回は Base64 data URI をそのまま利用するためコメントアウト）
+// --- rehype-sanitize の記述は今回は使用しないためコメントアウト ---
 // import rehypeSanitize from "rehype-sanitize";
 // import { defaultSchema } from "hast-util-sanitize";
 // const customSchema = {
@@ -40,10 +40,8 @@ import remarkGfm from "remark-gfm";
 //   },
 // };
 
-// コードブロックのシンタックスハイライト用コンポーネント
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-// カスタムCSS のインポート
 import "../AddArticle.css";
 
 // ユーザー情報の型定義
@@ -513,8 +511,8 @@ const AddArticle: React.FC = () => {
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
-                    // データURI が削除される場合は rehypePlugins の設定をコメントアウトしてください
-                    rehypePlugins={[[/* rehypeSanitize, customSchema */]]}
+                    // サニタイズが不要なため rehypePlugins の設定はコメントアウト
+                    // rehypePlugins={[[rehypeSanitize, customSchema]]}
                     components={{
                       img: ({ node, ...props }) => {
                         if (
@@ -540,7 +538,7 @@ const AddArticle: React.FC = () => {
                         }
                         return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
-                      code({ node, inline, className, children, ...props }) {
+                      code({ node, inline, className, children = [], ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
                           <SyntaxHighlighter
@@ -549,7 +547,7 @@ const AddArticle: React.FC = () => {
                             PreTag="div"
                             {...props}
                           >
-                            {children ? String(children).replace(/\n$/, "") : ""}
+                            {children.join("")}
                           </SyntaxHighlighter>
                         ) : (
                           <code className={className} {...props}>
