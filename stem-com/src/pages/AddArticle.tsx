@@ -517,7 +517,11 @@ const AddArticle: React.FC = () => {
             {/* 右側：プレビュー（Base64画像表示） */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <div className="prose prose-indigo max-w-none dark:prose-dark">
+                <div
+                  className="prose prose-indigo max-w-none dark:prose-dark"
+                  // key に markdownContent と imageMapping の内容を付与することで、imageMapping 更新時にも再レンダリングさせる
+                  key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
+                >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
