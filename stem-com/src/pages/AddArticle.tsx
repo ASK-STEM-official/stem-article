@@ -169,15 +169,14 @@ const AddArticle: React.FC = () => {
         setIsUploading(false);
         return;
       }
-      // ※余分な空白を取り除く
+      // 余分な空白を除去
       const base64Data = result.trim();
       const id = nanoid(6); // ユニークなID生成
       const placeholder = `temp://${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
       console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
 
-      // 改行ありのMarkdown記法で画像を挿入
-      // 左側のエディタには "temp://xxxx" のプレースホルダーで表示され、後でプレビュー側で Base64 画像に置換される
+      // Markdown にプレースホルダー付き画像記法を追加
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => {
         const newContent = prev + imageMarkdown;
@@ -185,7 +184,7 @@ const AddArticle: React.FC = () => {
         return newContent;
       });
 
-      // imageMapping に画像の Base64 データとファイル名を登録
+      // imageMapping に画像データを登録
       setImageMapping((prev) => {
         const newMapping = { ...prev, [id]: { base64: base64Data, filename: selectedImageFile.name } };
         console.log("Debug: Updated imageMapping in handleUploadImage:", newMapping);
@@ -295,7 +294,7 @@ const AddArticle: React.FC = () => {
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
 
-    // base64Data に "data:image/xxx;base64," が含まれる場合は除去し、純粋なBase64文字列にする
+    // base64Data に "data:image/xxx;base64," が含まれる場合は除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
 
     const payload = {
@@ -406,7 +405,6 @@ const AddArticle: React.FC = () => {
             onChange={(e) => setEditorSearch(e.target.value)}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-
           {editorSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
@@ -477,7 +475,7 @@ const AddArticle: React.FC = () => {
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">内容 (Markdown)</label>
           <div className="flex flex-col md:flex-row gap-4">
-            {/* 左側：テキストエディタ＋ツールバー（編集用・プレーンテキスト） */}
+            {/* 左側：テキストエディタ＋ツールバー */}
             <div className="w-full md:w-1/2">
               <div className="mb-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => insertAtCursor("# ")} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded">
@@ -520,19 +518,18 @@ const AddArticle: React.FC = () => {
                 画像追加
               </button>
             </div>
-            {/* 右側：プレビュー（Base64画像表示） */}
+            {/* 右側：プレビュー */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
                 <div
                   className="prose prose-indigo max-w-none dark:prose-dark"
-                  // key に markdownContent と imageMapping の内容を付与することで、更新時に再レンダリングさせる
+                  // imageMapping を含めた key で再レンダリングを強制
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      // 画像コンポーネントのカスタムレンダラー
-                      // src が "temp://xxxx" の場合、imageMapping から Base64 データを取得して表示する
+                      // カスタム画像レンダラー
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
@@ -557,14 +554,11 @@ const AddArticle: React.FC = () => {
                         }
                         return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
-                      // コードブロックのシンタックスハイライト用カスタムレンダラー
+                      // コードブロックレンダラー
                       code({ node, inline, className, children, ...props }) {
-                        // className から言語情報を抽出する正規表現
                         const match = /language-(\w+)/.exec(className || "");
-                        // children は配列になっている場合があるので、最初の要素を取り出す
                         const codeString = Array.isArray(children) ? children[0] : "";
                         return !inline && match ? (
-                          // SyntaxHighlighter コンポーネントでコードブロックを表示
                           <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
                             {codeString.replace(/\n$/, "")}
                           </SyntaxHighlighter>
