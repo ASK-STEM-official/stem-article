@@ -147,13 +147,6 @@ const App = () => {
     }
   };
 
-  /**
-   * ユーザーデータを Firestore に保存する関数。
-   * - avatarUrl : GitHubのプロフィール画像URL
-   * - displayName : GitHubのdisplayName または login
-   * - bio : 最初は空文字列
-   * すでに存在する場合は「既存データを優先」し、上書きしない。
-   */
   const saveUserData = async (firebaseUser: any, token: string) => {
     try {
       const db = getFirestore();
