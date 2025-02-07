@@ -172,7 +172,7 @@ const AddArticle: React.FC = () => {
       // 余分な空白を除去
       const base64Data = result.trim();
       const id = nanoid(6); // ユニークなID生成
-      const placeholder = `temp://${id}`;
+      const placeholder = `/images/${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
       console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
 
@@ -531,14 +531,14 @@ const AddArticle: React.FC = () => {
                     components={{
                       // カスタム画像レンダラー
                       img: ({ node, ...props }) => {
-                        // 画像の src が temp:// で始まる場合、imageMapping から Base64 を取得する
+                        // 画像の src が http:// で始まる場合、imageMapping から Base64 を取得する
                         console.log("画像の src が temp:// で始まる場合、imageMapping から Base64 を取得する");
                         if (
                           props.src &&
                           typeof props.src === "string" &&
-                          props.src.startsWith("temp://")
+                          props.src.startsWith("/images/")
                         ) {
-                          const id = props.src.replace("temp://", "");
+                          const id = props.src.replace("/images/", "");
                           const mapped = imageMapping[id];
                           console.log("Debug");
                           console.log("Debug: Custom image renderer - id:", id, "mapping:", mapped);
