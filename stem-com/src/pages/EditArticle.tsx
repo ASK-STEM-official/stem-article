@@ -30,7 +30,7 @@ interface UserData {
   avatarUrl: string;
 }
 
-// 記事の型定義
+// 記事の型定義（未使用の state を削除するため、型自体は残しています）
 interface Article {
   id: string;
   title: string;
@@ -49,11 +49,10 @@ const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Firestore から取得した記事全体（必要に応じて利用）
-  const [article, setArticle] = useState<Article | null>(null);
-  // 読み込み状態やエラー状態
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  // 以下の未使用 state（article, loading, error）は使用していないため削除しました
+  // const [article, setArticle] = useState<Article | null>(null);
+  // const [loading, setLoading] = useState<boolean>(true);
+  // const [error, setError] = useState<string | null>(null);
 
   // 入力内容等の状態管理
   const [title, setTitle] = useState<string>("");
@@ -133,14 +132,13 @@ const EditArticle: React.FC = () => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as Article;
-          const fetchedArticle: Article = { id: docSnap.id, ...data };
-          setArticle(fetchedArticle);
-          setTitle(fetchedArticle.title);
-          setMarkdownContent(fetchedArticle.content);
+          // 未使用の article state は削除し、タイトルとコンテンツのみ設定
+          setTitle(data.title);
+          setMarkdownContent(data.content);
           // 編集者が設定されていれば、各ユーザー情報を取得する
-          if (fetchedArticle.editors && Array.isArray(fetchedArticle.editors)) {
+          if (data.editors && Array.isArray(data.editors)) {
             const editorsData: UserData[] = [];
-            for (const editorId of fetchedArticle.editors) {
+            for (const editorId of data.editors) {
               const userDocRef = doc(db, "users", editorId);
               const userDoc = await getDoc(userDocRef);
               if (userDoc.exists()) {
@@ -155,15 +153,13 @@ const EditArticle: React.FC = () => {
             setSelectedEditors(editorsData);
           }
         } else {
-          setArticle(null);
           navigate("/");
         }
       } catch (error) {
         console.error("記事の取得に失敗しました:", error);
-        setError("記事の取得に失敗しました。");
         navigate("/");
       } finally {
-        setLoading(false);
+        // setLoading(false); ← 未使用のため削除
       }
     };
     fetchArticle();
@@ -236,10 +232,7 @@ const EditArticle: React.FC = () => {
       const placeholder = `/images/${id}`;
       // Markdown にプレースホルダー付き画像記法を追加
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
-      setMarkdownContent((prev) => {
-        const newContent = prev + imageMarkdown;
-        return newContent;
-      });
+      setMarkdownContent((prev) => prev + imageMarkdown);
 
       // imageMapping に画像データを登録
       setImageMapping((prev) => ({
@@ -270,7 +263,8 @@ const EditArticle: React.FC = () => {
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
       // マッチ結果の取得
-      const [, altText, placeholder, id] = match;
+      // altText はここでは使用しないので破棄（除外）しています
+      const [, , placeholder, id] = match;
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
           try {
