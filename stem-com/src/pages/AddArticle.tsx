@@ -539,6 +539,7 @@ const AddArticle: React.FC = () => {
                         ) {
                           const id = props.src.replace("temp://", "");
                           const mapped = imageMapping[id];
+                          console.log("Debug");
                           console.log("Debug: Custom image renderer - id:", id, "mapping:", mapped);
                           if (mapped && mapped.base64.trim() !== "") {
                             // 明示的に必要な属性のみ設定する
