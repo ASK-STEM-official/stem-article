@@ -1,3 +1,7 @@
+// AddArticle.tsx
+// このコンポーネントは記事投稿用ページです。
+// タイトル、Markdown形式の本文、編集者の追加、画像アップロード機能を実装し、Firestore に記事を保存します。
+
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
 import {
@@ -33,7 +37,7 @@ interface UserData {
 /**
  * AddArticle コンポーネント
  * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加や画像のアップロードを行い、
- * Firestore に記事を保存する。
+ * Firestore に記事を保存します。
  */
 const AddArticle: React.FC = () => {
   // ----------------------------
@@ -151,7 +155,7 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   // 画像アップロードモーダル内での処理
   // ----------------------------
-  // 画像ファイルを読み込み、Base64形式に変換後、Markdown に "temp://xxx" プレースホルダー付き記法を挿入
+  // 画像ファイルを読み込み、Base64形式に変換後、Markdown に "/images/xxx" プレースホルダー付き記法を挿入
   const handleUploadImage = () => {
     if (!selectedImageFile) {
       alert("画像ファイルを選択してください。");
@@ -204,7 +208,7 @@ const AddArticle: React.FC = () => {
 
   // ----------------------------
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
-  // ※最終的な記事データ保存前に実行され、"temp://xxx" プレースホルダーを実際のアップロード先URLに置換する
+  // ※最終的な記事データ保存前に実行され、"/images/xxx" プレースホルダーを実際のアップロード先URLに置換します
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((\/images\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
@@ -212,8 +216,8 @@ const AddArticle: React.FC = () => {
 
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 使用しない変数は破棄するため、先頭2要素は無視する
-      const [, , placeholder, id] = match;
+      // 使用しない変数は破棄するため、先頭2要素は無視しています
+      const [, altText, placeholder, id] = match;
       console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
 
       if (!placeholderToURL[placeholder]) {
@@ -409,7 +413,8 @@ const AddArticle: React.FC = () => {
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
                 .filter((u) => {
-                  const lowName = u.displayName.toLowerCase();
+                  // u.displayName が未定義の場合は空文字とする
+                  const lowName = (u.displayName || "").toLowerCase();
                   const lowSearch = editorSearch.toLowerCase();
                   return (
                     lowName.includes(lowSearch) &&
@@ -430,7 +435,7 @@ const AddArticle: React.FC = () => {
                   </li>
                 ))}
               {allUsers.filter((u) => {
-                const lowName = u.displayName.toLowerCase();
+                const lowName = (u.displayName || "").toLowerCase();
                 const lowSearch = editorSearch.toLowerCase();
                 return (
                   lowName.includes(lowSearch) &&
@@ -531,8 +536,8 @@ const AddArticle: React.FC = () => {
                     components={{
                       // カスタム画像レンダラー
                       img: ({ node, ...props }) => {
-                        // 画像の src が http:// で始まる場合、imageMapping から Base64 を取得する
-                        console.log("画像の src が temp:// で始まる場合、imageMapping から Base64 を取得する");
+                        // 画像の src が "/images/" で始まる場合、imageMapping から Base64 を取得
+                        console.log("画像の src が /images/ で始まる場合、imageMapping から Base64 を取得する");
                         if (
                           props.src &&
                           typeof props.src === "string" &&
@@ -540,10 +545,9 @@ const AddArticle: React.FC = () => {
                         ) {
                           const id = props.src.replace("/images/", "");
                           const mapped = imageMapping[id];
-                          console.log("Debug");
                           console.log("Debug: Custom image renderer - id:", id, "mapping:", mapped);
                           if (mapped && mapped.base64.trim() !== "") {
-                            // 明示的に必要な属性のみ設定する
+                            // 必要な属性のみ設定
                             console.log("明示的に必要な属性のみ設定する");
                             return (
                               <img
