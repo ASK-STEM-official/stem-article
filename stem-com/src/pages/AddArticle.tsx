@@ -206,7 +206,7 @@ const AddArticle: React.FC = () => {
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし置換する処理
   // ※最終的な記事データ保存前に実行され、"temp://xxx" プレースホルダーを実際のアップロード先URLに置換する
   const processMarkdownContent = async (markdown: string): Promise<string> => {
-    const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9_-]+))\)/g;
+    const placeholderRegex = /!\[([^\]]*)\]\((\/images\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const placeholderToURL: { [key: string]: string } = {};
 
