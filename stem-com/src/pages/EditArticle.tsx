@@ -49,11 +49,6 @@ const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // 以下の未使用 state（article, loading, error）は使用していないため削除しました
-  // const [article, setArticle] = useState<Article | null>(null);
-  // const [loading, setLoading] = useState<boolean>(true);
-  // const [error, setError] = useState<string | null>(null);
-
   // 入力内容等の状態管理
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
@@ -132,7 +127,7 @@ const EditArticle: React.FC = () => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as Article;
-          // 未使用の article state は削除し、タイトルとコンテンツのみ設定
+          // タイトルとコンテンツのみ設定
           setTitle(data.title);
           setMarkdownContent(data.content);
           // 編集者が設定されていれば、各ユーザー情報を取得する
@@ -158,8 +153,6 @@ const EditArticle: React.FC = () => {
       } catch (error) {
         console.error("記事の取得に失敗しました:", error);
         navigate("/");
-      } finally {
-        // setLoading(false); ← 未使用のため削除
       }
     };
     fetchArticle();
@@ -228,8 +221,10 @@ const EditArticle: React.FC = () => {
       // Base64データを取得
       const base64Data = result.trim();
       const id = nanoid(6); // ユニークなID生成
-      // AddArticle と同様に "/images/" プレースホルダーを使用
       const placeholder = `/images/${id}`;
+      console.log("Debug: Uploaded image placeholder:", placeholder);
+      console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
+
       // Markdown にプレースホルダー付き画像記法を追加
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
@@ -253,7 +248,7 @@ const EditArticle: React.FC = () => {
 
   // ----------------------------
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし、URL に置換する処理
-  // ----------------------------
+  // ※最終的な記事データ保存前に実行され、"/images/xxx" プレースホルダーを実際のアップロード先URLに置換します
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     // プレースホルダー形式は /images/ID とする
     const placeholderRegex = /!\[([^\]]*)\]\((\/images\/([a-zA-Z0-9_-]+))\)/g;
@@ -262,15 +257,15 @@ const EditArticle: React.FC = () => {
 
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // マッチ結果の取得
-      // altText はここでは使用しないので破棄（除外）しています
+      // 使用しない変数は破棄するため、altText は除外して分割
       const [, , placeholder, id] = match;
+      console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
       if (!placeholderToURL[placeholder]) {
         const p = (async () => {
           try {
             const entry = imageMapping[id];
             if (!entry) {
-              console.log("Debug: 該当する imageMapping がありません。id:", id);
+              console.log("Debug: No imageMapping entry for id:", id);
               return;
             }
             // 拡張子の取得
@@ -278,6 +273,7 @@ const EditArticle: React.FC = () => {
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
             const original = `data:image/${imageType};base64,`;
             const uploadedUrl = await uploadBase64ImageToGitHub(entry.base64, original);
+            console.log("Debug: Uploaded image URL for placeholder", placeholder, "->", uploadedUrl);
             placeholderToURL[placeholder] = uploadedUrl;
           } catch (err) {
             console.error("画像アップロード失敗:", err);
@@ -291,8 +287,10 @@ const EditArticle: React.FC = () => {
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (m, altText, placeholder, id) => {
         const url = placeholderToURL[placeholder];
+        console.log("Debug: Replacing placeholder", placeholder, "with URL:", url);
         return url ? `![${altText}](${url})` : m;
       }
     );
@@ -363,6 +361,7 @@ const EditArticle: React.FC = () => {
     }
 
     const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
+    console.log("Debug: GitHub uploaded URL:", uploadedUrl);
     return uploadedUrl;
   };
 
@@ -376,7 +375,7 @@ const EditArticle: React.FC = () => {
     setIsSubmitting(true);
     try {
       let content = markdownContent;
-      // Markdown 内の画像プレースホルダーを GitHub 上の URL に置換
+      // Markdown 内の画像プレースホルダーを GitHub 上の URL に置換する
       content = await processMarkdownContent(content);
 
       // 既存記事のIDを用いて更新（merge オプションで上書き更新）
@@ -447,12 +446,15 @@ const EditArticle: React.FC = () => {
           {editorSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
-                .filter(
-                  (user) =>
-                    user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
-                    user.uid !== userId &&
-                    !selectedEditors.find((editor) => editor.uid === user.uid)
-                )
+                .filter((u) => {
+                  const lowName = (u.displayName || "").toLowerCase();
+                  const lowSearch = editorSearch.toLowerCase();
+                  return (
+                    lowName.includes(lowSearch) &&
+                    u.uid !== userId &&
+                    !selectedEditors.find((ed) => ed.uid === u.uid)
+                  );
+                })
                 .map((user) => (
                   <li
                     key={user.uid}
@@ -471,12 +473,15 @@ const EditArticle: React.FC = () => {
                     </div>
                   </li>
                 ))}
-              {allUsers.filter(
-                (user) =>
-                  user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
-                  user.uid !== userId &&
-                  !selectedEditors.find((editor) => editor.uid === user.uid)
-              ).length === 0 && (
+              {allUsers.filter((u) => {
+                const lowName = (u.displayName || "").toLowerCase();
+                const lowSearch = editorSearch.toLowerCase();
+                return (
+                  lowName.includes(lowSearch) &&
+                  u.uid !== userId &&
+                  !selectedEditors.find((ed) => ed.uid === u.uid)
+                );
+              }).length === 0 && (
                 <li className="px-3 py-2 text-gray-500 dark:text-gray-400">
                   該当するユーザーが見つかりません。
                 </li>
@@ -582,7 +587,10 @@ const EditArticle: React.FC = () => {
               <textarea
                 ref={textareaRef}
                 value={markdownContent}
-                onChange={(e) => setMarkdownContent(e.target.value)}
+                onChange={(e) => {
+                  setMarkdownContent(e.target.value);
+                  console.log("Debug: markdownContent changed:", e.target.value);
+                }}
                 placeholder="ここに Markdown を入力"
                 className="w-full h-80 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
               />
@@ -597,11 +605,14 @@ const EditArticle: React.FC = () => {
             {/* 右側：リアルタイムプレビュー */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <div className="prose prose-indigo max-w-none dark:prose-dark">
+                <div
+                  className="prose prose-indigo max-w-none dark:prose-dark"
+                  key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
+                >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      // 画像レンダラー：プレースホルダーの場合、imageMapping から Base64 を取得
+                      // カスタム画像レンダラー：プレースホルダーの場合、imageMapping から Base64 を取得
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
@@ -621,7 +632,6 @@ const EditArticle: React.FC = () => {
                           }
                           return <span style={{ color: "red" }}>画像読み込みエラー: {id}</span>;
                         }
-                        // 通常の画像はそのままレンダリング
                         return <img src={props.src} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
                       // コードブロックレンダラー
@@ -671,6 +681,7 @@ const EditArticle: React.FC = () => {
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
                   setSelectedImageFile(e.target.files[0]);
+                  console.log("Debug: Selected image file:", e.target.files[0]);
                 }
               }}
               className="mb-4"
