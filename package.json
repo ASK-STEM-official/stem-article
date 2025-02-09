@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "hast-util-sanitize": "^5.0.2",
+    "rehype-sanitize": "^6.0.0"
+  }
+}

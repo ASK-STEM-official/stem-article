@@ -1,9 +1,8 @@
-// src/pages/EditArticle.tsx
-// このファイルは記事編集用コンポーネントです。
-// ツールバー付きのオリジナル Markdown エディタを実装しており、
-// 左側に入力エリア（ツールバー＋テキストエリア）、右側にリアルタイムプレビューを表示します。
-// 画像追加ボタンでは、画像ファイルを Base64 形式に変換した上で、テキストエリアには短いプレースホルダー（例："temp://ID"）を挿入し、
-// プレビューではそのプレースホルダーに対応する Base64 画像を表示、投稿時は GitHub にアップロードして URL に置換します.
+// EditArticle.tsx
+// このコンポーネントは記事編集用のページを実装しています。
+// 指定された記事IDの内容を Firestore から取得し、タイトル、Markdown 形式の本文、編集者の追加・削除、画像アップロード、タグ付け機能を行います。
+// 画像アップロード時は、画像ファイルを Base64 形式に変換し、本文中にプレースホルダー（例: /images/xxxxx）を挿入します。
+// 記事更新前にプレースホルダーを GitHub 上の画像 URL に置換してから更新を行います。
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -31,7 +30,7 @@ interface UserData {
   avatarUrl: string;
 }
 
-// 記事の型定義
+// 記事の型定義（タグ情報を追加）
 interface Article {
   id: string;
   title: string;
@@ -43,6 +42,7 @@ interface Article {
   authorId: string;
   authorAvatarUrl?: string;
   editors?: string[]; // 編集者のUIDの配列
+  tags?: string[]; // タグの配列
 }
 
 const EditArticle: React.FC = () => {
@@ -50,38 +50,43 @@ const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // 以下の state は将来的に利用するため、ESLint の警告を無視
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [article, setArticle] = useState<Article | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [loading, setLoading] = useState<boolean>(true);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [error, setError] = useState<string | null>(null);
-
+  // ----------------------------
+  // 各種状態管理
+  // ----------------------------
+  // タイトルとMarkdown本文
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
+  // ユーザー認証情報
   const [userId, setUserId] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  // 編集者関連の状態
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
+
+  // タグ関連の状態（Firestore に保存済みのタグ一覧、選択されたタグ、新規入力用）
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagSearch, setTagSearch] = useState<string>("");
+
+  // 画像アップロード関連の状態
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-  // 画像のプレースホルダーと Base64 データの対応マッピング
-  const [imageMapping, setImageMapping] = useState<{ [key: string]: { base64: string; filename: string } }>({});
+  // 画像プレースホルダーと Base64 画像・ファイル名の対応マッピング
+  const [imageMapping, setImageMapping] = useState<{
+    [key: string]: { base64: string; filename: string };
+  }>({});
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // Firebase 認証
-  const auth = getAuth();
-
-  // テキストエリアの参照（カーソル位置取得・操作に利用）
+  // Markdown 入力エリアの参照（カーソル位置制御用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const auth = getAuth();
+
   // ----------------------------
-  // FirebaseAuth のユーザーログイン状態を監視
+  // FirebaseAuth のログイン状態監視
   // ----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
@@ -118,7 +123,25 @@ const EditArticle: React.FC = () => {
   }, []);
 
   // ----------------------------
-  // 編集対象の記事を取得する
+  // Firestore から全タグ（"tags" コレクション）を取得する処理
+  // ----------------------------
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const tagsCol = collection(db, "tags");
+        const tagsSnapshot = await getDocs(tagsCol);
+        const tagsList = tagsSnapshot.docs.map((doc) => doc.data().name as string);
+        setAllTags(tagsList);
+        console.log("Debug: Fetched tags:", tagsList);
+      } catch (error) {
+        console.error("タグの取得に失敗:", error);
+      }
+    };
+    fetchTags();
+  }, []);
+
+  // ----------------------------
+  // 編集対象の記事を Firestore から取得する
   // ----------------------------
   useEffect(() => {
     const fetchArticle = async () => {
@@ -131,13 +154,17 @@ const EditArticle: React.FC = () => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as Article;
-          const fetchedArticle: Article = { id: docSnap.id, ...data };
-          setArticle(fetchedArticle);
-          setTitle(fetchedArticle.title);
-          setMarkdownContent(fetchedArticle.content);
-          if (fetchedArticle.editors && Array.isArray(fetchedArticle.editors)) {
+          // タイトルとコンテンツを設定
+          setTitle(data.title);
+          setMarkdownContent(data.content);
+          // タグが設定されていれば初期状態に設定
+          if (data.tags && Array.isArray(data.tags)) {
+            setSelectedTags(data.tags);
+          }
+          // 編集者が設定されていれば、各ユーザー情報を取得する
+          if (data.editors && Array.isArray(data.editors)) {
             const editorsData: UserData[] = [];
-            for (const editorId of fetchedArticle.editors) {
+            for (const editorId of data.editors) {
               const userDocRef = doc(db, "users", editorId);
               const userDoc = await getDoc(userDocRef);
               if (userDoc.exists()) {
@@ -152,15 +179,11 @@ const EditArticle: React.FC = () => {
             setSelectedEditors(editorsData);
           }
         } else {
-          setArticle(null);
           navigate("/");
         }
       } catch (error) {
         console.error("記事の取得に失敗しました:", error);
-        setError("記事の取得に失敗しました。");
         navigate("/");
-      } finally {
-        setLoading(false);
       }
     };
     fetchArticle();
@@ -170,8 +193,9 @@ const EditArticle: React.FC = () => {
   // 編集者を追加する処理
   // ----------------------------
   const handleAddEditor = (user: UserData) => {
-    if (selectedEditors.find((editor) => editor.uid === user.uid)) return;
-    setSelectedEditors([...selectedEditors, user]);
+    if (!selectedEditors.some((editor) => editor.uid === user.uid)) {
+      setSelectedEditors([...selectedEditors, user]);
+    }
     setEditorSearch("");
   };
 
@@ -183,26 +207,46 @@ const EditArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // テキストエリアのカーソル位置に指定の文字列を挿入する関数
+  // タグを追加する処理（既存タグから選択 or 新規作成）
   // ----------------------------
-  const insertAtCursor = (textToInsert: string) => {
-    if (textareaRef.current) {
-      const textarea = textareaRef.current;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const before = markdownContent.substring(0, start);
-      const after = markdownContent.substring(end);
-      const newContent = before + textToInsert + after;
-      setMarkdownContent(newContent);
-      setTimeout(() => {
-        textarea.focus();
-        textarea.selectionStart = textarea.selectionEnd = start + textToInsert.length;
-      }, 0);
+  const handleAddTag = (tag: string) => {
+    const trimmedTag = tag.trim();
+    if (trimmedTag === "") return;
+    if (!selectedTags.includes(trimmedTag)) {
+      setSelectedTags([...selectedTags, trimmedTag]);
     }
+    setTagSearch("");
   };
 
   // ----------------------------
-  // 画像アップロードモーダル内でのアップロード処理（連打防止のため isUploading 状態を利用）
+  // 選択されたタグを削除する処理
+  // ----------------------------
+  const handleRemoveTag = (tag: string) => {
+    setSelectedTags(selectedTags.filter((t) => t !== tag));
+  };
+
+  // ----------------------------
+  // テキストエディタのカーソル位置に文字列を挿入する処理
+  // ----------------------------
+  const insertAtCursor = (text: string) => {
+    if (!textareaRef.current) return;
+    const { selectionStart, selectionEnd } = textareaRef.current;
+    const before = markdownContent.slice(0, selectionStart);
+    const after = markdownContent.slice(selectionEnd);
+    const updated = before + text + after;
+    setMarkdownContent(updated);
+    // 挿入後のカーソル位置を調整
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = selectionStart + text.length;
+        textareaRef.current.selectionEnd = selectionStart + text.length;
+      }
+    }, 0);
+  };
+
+  // ----------------------------
+  // 画像アップロードモーダル内での画像読み込み・プレースホルダー挿入処理
   // ----------------------------
   const handleUploadImage = () => {
     if (!selectedImageFile) {
@@ -212,14 +256,27 @@ const EditArticle: React.FC = () => {
     if (isUploading) return;
     setIsUploading(true);
     const reader = new FileReader();
-    reader.readAsDataURL(selectedImageFile);
     reader.onload = () => {
-      const result = reader.result as string;
-      const id = nanoid(6);
-      const placeholderUrl = `temp://${id}`;
-      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholderUrl})\n`;
+      const result = reader.result;
+      if (!result || typeof result !== "string" || result.trim() === "") {
+        alert("画像の読み込みに失敗しました。ファイルが無効です。");
+        setIsUploading(false);
+        return;
+      }
+      // Base64データを取得
+      const base64Data = result.trim();
+      const id = nanoid(6); // ユニークなID生成
+      const placeholder = `/images/${id}`;
+      console.log("Debug: Uploaded image placeholder:", placeholder);
+      console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
+      // Markdown にプレースホルダー付き画像記法を追加
+      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
-      setImageMapping((prev) => ({ ...prev, [id]: { base64: result, filename: selectedImageFile.name } }));
+      // imageMapping に画像データを登録
+      setImageMapping((prev) => ({
+        ...prev,
+        [id]: { base64: base64Data, filename: selectedImageFile.name },
+      }));
       setShowImageModal(false);
       setSelectedImageFile(null);
       setIsUploading(false);
@@ -228,66 +285,74 @@ const EditArticle: React.FC = () => {
       alert("画像の読み込みに失敗しました。");
       setIsUploading(false);
     };
+    reader.readAsDataURL(selectedImageFile);
   };
 
   // ----------------------------
-  // Markdown 内のプレースホルダー画像を GitHub にアップロードして URL に置換する処理
+  // Markdown 内のプレースホルダー画像を GitHub にアップロードし、URL に置換する処理
+  // ※更新前に実行し、本文中の "/images/xxx" プレースホルダーを実際のアップロード先 URL に置換します
   // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
-    // プレースホルダー形式： temp://ID
-    const placeholderRegex = /!\[([^\]]*)\]\((temp:\/\/([a-zA-Z0-9]+))\)/g;
+    const placeholderRegex = /!\[([^\]]*)\]\((\/images\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const placeholderToURL: { [key: string]: string } = {};
-
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 必要な値のみ取得（最初の2要素は破棄）
       const [, , placeholder, id] = match;
-      if (placeholderToURL[placeholder]) continue;
-      const uploadPromise = (async () => {
-        if (imageMapping[id]) {
+      console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
+      if (!placeholderToURL[placeholder]) {
+        const p = (async () => {
           try {
-            const extMatch = imageMapping[id].filename.match(/\.([a-zA-Z0-9]+)$/);
+            const entry = imageMapping[id];
+            if (!entry) {
+              console.log("Debug: No imageMapping entry for id:", id);
+              return;
+            }
+            // 拡張子の取得
+            const extMatch = entry.filename.match(/\.([a-zA-Z0-9]+)$/);
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
-            const dummyOriginalMatch = `data:image/${imageType};base64,`;
-            const imageUrl = await uploadBase64ImageToGitHub(imageMapping[id].base64, dummyOriginalMatch);
-            placeholderToURL[placeholder] = imageUrl;
-          } catch (error) {
-            console.error("画像のアップロードに失敗しました:", error);
-            throw error;
+            const original = `data:image/${imageType};base64,`;
+            const uploadedUrl = await uploadBase64ImageToGitHub(entry.base64, original);
+            console.log("Debug: Uploaded image URL for placeholder", placeholder, "->", uploadedUrl);
+            placeholderToURL[placeholder] = uploadedUrl;
+          } catch (err) {
+            console.error("画像アップロード失敗:", err);
+            throw err;
           }
-        }
-      })();
-      uploadPromises.push(uploadPromise);
+        })();
+        uploadPromises.push(p);
+      }
     }
     await Promise.all(uploadPromises);
-    const updatedMarkdown = markdown.replace(
+    const replaced = markdown.replace(
       placeholderRegex,
-      (match, altText, placeholder, id) => {
+      (m, altText, placeholder, id) => {
         const url = placeholderToURL[placeholder];
-        return url ? `![${altText}](${url})` : match;
+        console.log("Debug: Replacing placeholder", placeholder, "with URL:", url);
+        return url ? `![${altText}](${url})` : m;
       }
     );
-    return updatedMarkdown;
+    return replaced;
   };
 
   // ----------------------------
   // Firestore から GitHub トークンを取得する処理
   // ----------------------------
-  async function fetchGithubToken() {
+  async function fetchGithubToken(): Promise<string> {
     try {
       const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG");
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        return data.key;
-      } else {
-        console.error("Document not found!");
-        return null;
+        if (data.key) {
+          return data.key as string;
+        }
       }
-    } catch (error) {
-      console.error("Error fetching token:", error);
-      return null;
+      console.error("GitHub トークンのドキュメントが見つかりません");
+      return "";
+    } catch (err) {
+      console.error("GitHubトークン取得エラー:", err);
+      return "";
     }
   }
 
@@ -296,41 +361,44 @@ const EditArticle: React.FC = () => {
   // ----------------------------
   const uploadBase64ImageToGitHub = async (
     base64Data: string,
-    originalMatch: string
+    originalHead: string
   ): Promise<string> => {
+    const token = await fetchGithubToken();
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
-    const GITHUB_TOKEN = await fetchGithubToken();
-    const imageTypeMatch = originalMatch.match(/data:image\/([a-zA-Z]+);base64,/);
+    // 画像タイプを抽出
+    const imageTypeMatch = originalHead.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
       imageType = imageTypeMatch[1];
     }
-    const id = nanoid(10);
-    const fileName = `${id}.${imageType}`;
-    const fileApiUrl = `${GITHUB_API_URL}${fileName}`;
+    const uniqueId = nanoid(10);
+    const fileName = `${uniqueId}.${imageType}`;
+    const apiUrl = `${GITHUB_API_URL}${fileName}`;
+    // base64Data から "data:image/xxx;base64," を除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
     const payload = {
       message: `Add image: ${fileName}`,
       content: pureBase64,
     };
-    const response = await fetch(fileApiUrl, {
+    const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
-        Authorization: `token ${GITHUB_TOKEN}`,
+        Authorization: `token ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message);
     }
-    const imageUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
-    return imageUrl;
+    const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
+    console.log("Debug: GitHub uploaded URL:", uploadedUrl);
+    return uploadedUrl;
   };
 
   // ----------------------------
-  // フォーム送信時の処理（連打防止のため isSubmitting 状態を利用）
+  // フォーム送信時の処理（記事更新処理）
   // ----------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -338,36 +406,48 @@ const EditArticle: React.FC = () => {
     setIsSubmitting(true);
     try {
       let content = markdownContent;
+      // Markdown 内の画像プレースホルダーを GitHub 上の URL に置換する
       content = await processMarkdownContent(content);
-      // ここでは記事の更新（merge:true）ではなく、新規追加として扱っています
-      // 必要に応じて、merge: true を利用してください。
-      const articleId = nanoid(10);
-      const articleRef = doc(db, "articles", articleId);
+      if (!id) {
+        throw new Error("記事IDが取得できません");
+      }
+      const docRef = doc(db, "articles", id);
       await setDoc(
-        articleRef,
+        docRef,
         {
           title,
           content,
           created_at: serverTimestamp(),
           authorId: userId,
           authorAvatarUrl: userAvatar,
-          editors: selectedEditors.map((editor) => editor.uid),
+          editors: selectedEditors.map((ed) => ed.uid),
+          tags: selectedTags, // タグ情報を追加
         },
         { merge: true }
       );
-      alert("記事を追加しました！");
-      setTitle("");
-      setMarkdownContent("");
-      setSelectedEditors([]);
+      // Firestore に存在しない新規タグがあれば登録する
+      for (const tag of selectedTags) {
+        if (!allTags.includes(tag)) {
+          try {
+            await setDoc(doc(db, "tags", tag), { name: tag });
+          } catch (err) {
+            console.error("タグの保存に失敗:", err);
+          }
+        }
+      }
+      alert("記事を更新しました！");
       navigate("/");
-    } catch (error) {
-      console.error("エラー:", error);
-      alert("記事の投稿に失敗しました。");
+    } catch (err) {
+      console.error("エラー:", err);
+      alert("記事の更新に失敗しました。");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // ----------------------------
+  // コンポーネントの描画
+  // ----------------------------
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
@@ -390,11 +470,81 @@ const EditArticle: React.FC = () => {
           />
         </div>
 
+        {/* タグ入力（既存タグから選択 or 新規作成） */}
+        <div className="form-group">
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">タグを追加</label>
+          <input
+            type="text"
+            placeholder="タグを検索または新規作成"
+            value={tagSearch}
+            onChange={(e) => setTagSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                const trimmed = tagSearch.trim();
+                if (trimmed !== "") {
+                  handleAddTag(trimmed);
+                }
+              }
+            }}
+            className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {tagSearch && (
+            <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
+              {allTags
+                .filter(
+                  (t) =>
+                    t.toLowerCase().includes(tagSearch.toLowerCase()) &&
+                    !selectedTags.includes(t)
+                )
+                .map((tag) => (
+                  <li
+                    key={tag}
+                    className="px-3 py-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                    onClick={() => handleAddTag(tag)}
+                  >
+                    {tag}
+                  </li>
+                ))}
+              {allTags.filter((t) => t.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                <li
+                  className="px-3 py-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                  onClick={() => handleAddTag(tagSearch)}
+                >
+                  新規タグ作成: {tagSearch}
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+
+        {/* 選択されたタグの表示 */}
+        {selectedTags.length > 0 && (
+          <div className="form-group">
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">選択されたタグ</label>
+            <ul className="space-y-2">
+              {selectedTags.map((tag) => (
+                <li
+                  key={tag}
+                  className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
+                >
+                  <span className="text-gray-800 dark:text-gray-100">{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* 編集者追加 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            編集者を追加
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
           <input
             type="text"
             placeholder="編集者を検索"
@@ -405,12 +555,15 @@ const EditArticle: React.FC = () => {
           {editorSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allUsers
-                .filter(
-                  (user) =>
-                    user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
-                    user.uid !== userId &&
-                    !selectedEditors.find((editor) => editor.uid === user.uid)
-                )
+                .filter((u) => {
+                  const lowName = (u.displayName || "").toLowerCase();
+                  const lowSearch = editorSearch.toLowerCase();
+                  return (
+                    lowName.includes(lowSearch) &&
+                    u.uid !== userId &&
+                    !selectedEditors.find((ed) => ed.uid === u.uid)
+                  );
+                })
                 .map((user) => (
                   <li
                     key={user.uid}
@@ -429,12 +582,15 @@ const EditArticle: React.FC = () => {
                     </div>
                   </li>
                 ))}
-              {allUsers.filter(
-                (user) =>
-                  user.displayName.toLowerCase().includes(editorSearch.toLowerCase()) &&
-                  user.uid !== userId &&
-                  !selectedEditors.find((editor) => editor.uid === user.uid)
-              ).length === 0 && (
+              {allUsers.filter((u) => {
+                const lowName = (u.displayName || "").toLowerCase();
+                const lowSearch = editorSearch.toLowerCase();
+                return (
+                  lowName.includes(lowSearch) &&
+                  u.uid !== userId &&
+                  !selectedEditors.find((ed) => ed.uid === u.uid)
+                );
+              }).length === 0 && (
                 <li className="px-3 py-2 text-gray-500 dark:text-gray-400">
                   該当するユーザーが見つかりません。
                 </li>
@@ -446,9 +602,7 @@ const EditArticle: React.FC = () => {
         {/* 選択された編集者の表示 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
-            <label className="block text-gray-700 dark:text-gray-300 mb-2">
-              現在の編集者
-            </label>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
             <ul className="space-y-2">
               {selectedEditors.map((editor) => (
                 <li
@@ -478,15 +632,14 @@ const EditArticle: React.FC = () => {
           </div>
         )}
 
-        {/* オリジナル Markdown エディタ GUI */}
+        {/* Markdown エディタ部分 */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             内容 (Markdown)
           </label>
           <div className="flex flex-col md:flex-row gap-4">
-            {/* 左側：ツールバー付き入力エリア */}
+            {/* 左側：テキストエディタ＋ツールバー */}
             <div className="w-full md:w-1/2">
-              {/* ツールバー */}
               <div className="mb-2 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -538,15 +691,16 @@ const EditArticle: React.FC = () => {
                   引用
                 </button>
               </div>
-              {/* テキストエリア（Markdown 入力） */}
               <textarea
                 ref={textareaRef}
                 value={markdownContent}
-                onChange={(e) => setMarkdownContent(e.target.value)}
+                onChange={(e) => {
+                  setMarkdownContent(e.target.value);
+                  console.log("Debug: markdownContent changed:", e.target.value);
+                }}
                 placeholder="ここに Markdown を入力"
                 className="w-full h-80 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
               />
-              {/* 画像追加ボタン */}
               <button
                 type="button"
                 onClick={() => setShowImageModal(true)}
@@ -558,41 +712,42 @@ const EditArticle: React.FC = () => {
             {/* 右側：リアルタイムプレビュー */}
             <div className="w-full md:w-1/2 overflow-y-auto p-2 border rounded bg-white dark:bg-gray-700 dark:text-white">
               {markdownContent.trim() ? (
-                <div className="prose prose-indigo max-w-none dark:prose-dark">
+                <div
+                  className="prose prose-indigo max-w-none dark:prose-dark"
+                  key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
+                >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      // img 要素のカスタムレンダリング： プレースホルダーの場合は imageMapping から Base64 データを取得
+                      // カスタム画像レンダラー：プレースホルダーの場合、imageMapping から Base64 を取得
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
                           typeof props.src === "string" &&
-                          props.src.startsWith("temp://")
+                          props.src.startsWith("/images/")
                         ) {
-                          const id = props.src.replace("temp://", "");
-                          if (imageMapping[id]) {
+                          const id = props.src.replace("/images/", "");
+                          const mapped = imageMapping[id];
+                          if (mapped && mapped.base64.trim() !== "") {
                             return (
                               <img
-                                {...props}
-                                src={imageMapping[id].base64}
-                                alt={props.alt || `画像: ${imageMapping[id].filename}`}
+                                src={mapped.base64}
+                                alt={props.alt || `画像: ${mapped.filename}`}
                                 style={{ maxWidth: "100%" }}
                               />
                             );
                           }
+                          return <span style={{ color: "red" }}>画像読み込みエラー: {id}</span>;
                         }
-                        return <img {...props} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
+                        return <img src={props.src} alt={props.alt || ""} style={{ maxWidth: "100%" }} />;
                       },
+                      // コードブロックレンダラー
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
+                        const codeString = Array.isArray(children) ? children[0] : "";
                         return !inline && match ? (
-                          <SyntaxHighlighter
-                            style={vscDarkPlus}
-                            language={match[1]}
-                            PreTag="div"
-                            {...props}
-                          >
-                            {String(children).replace(/\n$/, "")}
+                          <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
+                            {codeString.replace(/\n$/, "")}
                           </SyntaxHighlighter>
                         ) : (
                           <code className={className} {...props}>
@@ -611,8 +766,6 @@ const EditArticle: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* 投稿ボタン（連打防止のため isSubmitting 状態を利用） */}
         <button
           type="submit"
           disabled={isSubmitting}
@@ -635,6 +788,7 @@ const EditArticle: React.FC = () => {
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
                   setSelectedImageFile(e.target.files[0]);
+                  console.log("Debug: Selected image file:", e.target.files[0]);
                 }
               }}
               className="mb-4"

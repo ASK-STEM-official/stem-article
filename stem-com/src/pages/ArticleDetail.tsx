@@ -10,7 +10,9 @@ import { Calendar, User, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Article } from '../types/Article'; 
-import Editors from "../components/Editors.tsx";
+import Editors from "../components/Editors.tsx"; // 編集者表示コンポーネントのインポート
+
+// Firebase Authentication
 import { getAuth, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
 interface UserData {
