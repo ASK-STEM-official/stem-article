@@ -1,6 +1,6 @@
 // AddArticle.tsx
 // このコンポーネントは記事投稿用ページです。
-// タイトル、Markdown形式の本文、編集者の追加、画像アップロード機能を実装し、Firestore に記事を保存します。
+// タイトル、Markdown形式の本文、編集者の追加、画像アップロード機能、タグ付け機能を実装し、Firestore に記事を保存します。
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 // Firebase Firestore 関連のインポート
@@ -21,6 +21,8 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
+// Docusaurusのadmonitions構文をサポートするための remark プラグイン
+import remarkAdmonitions from "remark-admonitions";
 // コードブロックのシンタックスハイライト用コンポーネント
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -36,7 +38,7 @@ interface UserData {
 
 /**
  * AddArticle コンポーネント
- * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加や画像のアップロードを行い、
+ * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加、画像のアップロード、タグ付け機能を行い、
  * Firestore に記事を保存します。
  */
 const AddArticle: React.FC = () => {
@@ -45,6 +47,7 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
+  const [tags, setTags] = useState<string>(""); // タグ入力用の状態（カンマ区切り）
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
@@ -52,14 +55,10 @@ const AddArticle: React.FC = () => {
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
 
-  // Discord 関連（不要なため削除）
-  // const [introduceDiscord, setIntroduceDiscord] = useState<boolean>(false);
-
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   // 画像のプレースホルダーと Base64 データの対応マッピング
-  // ※アップロード時に生成した "/images/xxxx" のIDと、Base64画像データ・ファイル名を紐付ける
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
@@ -211,7 +210,6 @@ const AddArticle: React.FC = () => {
 
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 使用しない変数は破棄するため、altText は除外して分割
       const [, , placeholder, id] = match;
       console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
       if (!placeholderToURL[placeholder]) {
@@ -222,7 +220,6 @@ const AddArticle: React.FC = () => {
               console.log("Debug: No imageMapping entry for id:", id);
               return;
             }
-            // 拡張子の取得
             const extMatch = entry.filename.match(/\.([a-zA-Z0-9]+)$/);
             const imageType = extMatch && extMatch[1] ? extMatch[1] : "png";
             const original = `data:image/${imageType};base64,`;
@@ -241,7 +238,6 @@ const AddArticle: React.FC = () => {
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (m, altText, placeholder, id) => {
         const url = placeholderToURL[placeholder];
         console.log("Debug: Replacing placeholder", placeholder, "with URL:", url);
@@ -282,7 +278,6 @@ const AddArticle: React.FC = () => {
     const token = await fetchGithubToken();
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
 
-    // 画像タイプを抽出
     const imageTypeMatch = originalHead.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
@@ -292,7 +287,6 @@ const AddArticle: React.FC = () => {
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
 
-    // base64Data に "data:image/xxx;base64," が含まれる場合は除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
 
     const payload = {
@@ -329,17 +323,19 @@ const AddArticle: React.FC = () => {
     setIsSubmitting(true);
     try {
       let content = markdownContent;
-      // Markdown 内の画像プレースホルダーを GitHub 上の URL に置換する
       content = await processMarkdownContent(content);
 
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
-      // Discord 関連は不要なため固定値を設定
       const discordFlag = false;
+
+      // タグはカンマ区切りの入力から配列に変換
+      const tagsArray = tags.split(",").map(tag => tag.trim()).filter(tag => tag !== "");
 
       await setDoc(docRef, {
         title,
         content,
+        tags: tagsArray, // タグフィールドを追加
         created_at: serverTimestamp(),
         authorId: userId,
         authorAvatarUrl: userAvatar,
@@ -350,6 +346,7 @@ const AddArticle: React.FC = () => {
       alert("記事を追加しました！");
       setTitle("");
       setMarkdownContent("");
+      setTags("");
       setSelectedEditors([]);
       navigate("/");
     } catch (err) {
@@ -374,6 +371,19 @@ const AddArticle: React.FC = () => {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
+            className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        {/* タグ入力 */}
+        <div className="form-group">
+          <label htmlFor="tags" className="block text-gray-700 dark:text-gray-300">タグ (カンマ区切り)</label>
+          <input
+            type="text"
+            id="tags"
+            placeholder="例: React, Firebase, Markdown"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
@@ -536,9 +546,10 @@ const AddArticle: React.FC = () => {
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
+                    // remarkPlugins に Docusaursの構文をサポートするプラグインを追加
+                    remarkPlugins={[remarkGfm, remarkAdmonitions]}
                     components={{
-                      // カスタム画像レンダラー：プレースホルダーの場合、imageMapping から Base64 を取得
+                      // カスタム画像レンダラー
                       img: ({ node, ...props }) => {
                         if (
                           props.src &&
