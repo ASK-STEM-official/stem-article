@@ -1,8 +1,8 @@
 // EditArticle.tsx
 // このコンポーネントは記事編集用のページを実装しています。
-// 指定された記事IDの内容を Firestore から取得し、タイトル、Markdown 形式の本文、編集者の追加・削除、画像のアップロードなどを行います。
+// 指定された記事IDの内容を Firestore から取得し、タイトル、Markdown 形式の本文、編集者の追加・削除、画像アップロード、タグ付け機能を行います。
 // 画像アップロード時は、画像ファイルを Base64 形式に変換し、本文中にプレースホルダー（例: /images/xxxxx）を挿入します。
-// 記事投稿前にプレースホルダーを GitHub 上の画像 URL に置換してから更新を行います。
+// 記事更新前にプレースホルダーを GitHub 上の画像 URL に置換してから更新を行います。
 
 import React, { useState, useEffect, FormEvent, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -30,7 +30,7 @@ interface UserData {
   avatarUrl: string;
 }
 
-// 記事の型定義（未使用の state を削除するため、型自体は残しています）
+// 記事の型定義（タグ情報を追加）
 interface Article {
   id: string;
   title: string;
@@ -42,6 +42,7 @@ interface Article {
   authorId: string;
   authorAvatarUrl?: string;
   editors?: string[]; // 編集者のUIDの配列
+  tags?: string[]; // タグの配列
 }
 
 const EditArticle: React.FC = () => {
@@ -49,35 +50,43 @@ const EditArticle: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // 入力内容等の状態管理
+  // ----------------------------
+  // 各種状態管理
+  // ----------------------------
+  // タイトルとMarkdown本文
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
+  // ユーザー認証情報
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  // 編集者関連の状態
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
 
-  // 画像アップロード用の状態管理
+  // タグ関連の状態（Firestore に保存済みのタグ一覧、選択されたタグ、新規入力用）
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagSearch, setTagSearch] = useState<string>("");
+
+  // 画像アップロード関連の状態
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-  // プレースホルダーIDと Base64 画像・ファイル名の対応マッピング
+  // 画像プレースホルダーと Base64 画像・ファイル名の対応マッピング
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
-
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // Firebase Authentication の初期化
-  const auth = getAuth();
-
-  // Markdown 入力エリアの参照（カーソル位置操作用）
+  // Markdown 入力エリアの参照（カーソル位置制御用）
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const auth = getAuth();
+
   // ----------------------------
-  // FirebaseAuth のユーザーログイン状態を監視する
+  // FirebaseAuth のログイン状態監視
   // ----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
@@ -93,7 +102,7 @@ const EditArticle: React.FC = () => {
   }, [auth]);
 
   // ----------------------------
-  // Firestore の users コレクションから全ユーザーを取得する
+  // Firestore の users コレクションから全ユーザーを取得
   // ----------------------------
   useEffect(() => {
     const fetchUsers = async () => {
@@ -114,6 +123,24 @@ const EditArticle: React.FC = () => {
   }, []);
 
   // ----------------------------
+  // Firestore から全タグ（"tags" コレクション）を取得する処理
+  // ----------------------------
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const tagsCol = collection(db, "tags");
+        const tagsSnapshot = await getDocs(tagsCol);
+        const tagsList = tagsSnapshot.docs.map((doc) => doc.data().name as string);
+        setAllTags(tagsList);
+        console.log("Debug: Fetched tags:", tagsList);
+      } catch (error) {
+        console.error("タグの取得に失敗:", error);
+      }
+    };
+    fetchTags();
+  }, []);
+
+  // ----------------------------
   // 編集対象の記事を Firestore から取得する
   // ----------------------------
   useEffect(() => {
@@ -127,9 +154,13 @@ const EditArticle: React.FC = () => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as Article;
-          // タイトルとコンテンツのみ設定
+          // タイトルとコンテンツを設定
           setTitle(data.title);
           setMarkdownContent(data.content);
+          // タグが設定されていれば初期状態に設定
+          if (data.tags && Array.isArray(data.tags)) {
+            setSelectedTags(data.tags);
+          }
           // 編集者が設定されていれば、各ユーザー情報を取得する
           if (data.editors && Array.isArray(data.editors)) {
             const editorsData: UserData[] = [];
@@ -176,18 +207,34 @@ const EditArticle: React.FC = () => {
   };
 
   // ----------------------------
-  // テキストエリアのカーソル位置に文字列を挿入する処理
+  // タグを追加する処理（既存タグから選択 or 新規作成）
+  // ----------------------------
+  const handleAddTag = (tag: string) => {
+    const trimmedTag = tag.trim();
+    if (trimmedTag === "") return;
+    if (!selectedTags.includes(trimmedTag)) {
+      setSelectedTags([...selectedTags, trimmedTag]);
+    }
+    setTagSearch("");
+  };
+
+  // ----------------------------
+  // 選択されたタグを削除する処理
+  // ----------------------------
+  const handleRemoveTag = (tag: string) => {
+    setSelectedTags(selectedTags.filter((t) => t !== tag));
+  };
+
+  // ----------------------------
+  // テキストエディタのカーソル位置に文字列を挿入する処理
   // ----------------------------
   const insertAtCursor = (text: string) => {
     if (!textareaRef.current) return;
-
     const { selectionStart, selectionEnd } = textareaRef.current;
     const before = markdownContent.slice(0, selectionStart);
     const after = markdownContent.slice(selectionEnd);
-
     const updated = before + text + after;
     setMarkdownContent(updated);
-
     // 挿入後のカーソル位置を調整
     setTimeout(() => {
       if (textareaRef.current) {
@@ -207,9 +254,7 @@ const EditArticle: React.FC = () => {
       return;
     }
     if (isUploading) return;
-
     setIsUploading(true);
-
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
@@ -224,17 +269,14 @@ const EditArticle: React.FC = () => {
       const placeholder = `/images/${id}`;
       console.log("Debug: Uploaded image placeholder:", placeholder);
       console.log("Debug: Base64 data (先頭50文字):", base64Data.slice(0, 50));
-
       // Markdown にプレースホルダー付き画像記法を追加
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
       setMarkdownContent((prev) => prev + imageMarkdown);
-
       // imageMapping に画像データを登録
       setImageMapping((prev) => ({
         ...prev,
         [id]: { base64: base64Data, filename: selectedImageFile.name },
       }));
-
       setShowImageModal(false);
       setSelectedImageFile(null);
       setIsUploading(false);
@@ -248,16 +290,14 @@ const EditArticle: React.FC = () => {
 
   // ----------------------------
   // Markdown 内のプレースホルダー画像を GitHub にアップロードし、URL に置換する処理
-  // ※最終的な記事データ保存前に実行され、"/images/xxx" プレースホルダーを実際のアップロード先URLに置換します
+  // ※更新前に実行し、本文中の "/images/xxx" プレースホルダーを実際のアップロード先 URL に置換します
+  // ----------------------------
   const processMarkdownContent = async (markdown: string): Promise<string> => {
-    // プレースホルダー形式は /images/ID とする
     const placeholderRegex = /!\[([^\]]*)\]\((\/images\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
     const placeholderToURL: { [key: string]: string } = {};
-
     let match: RegExpExecArray | null;
     while ((match = placeholderRegex.exec(markdown)) !== null) {
-      // 使用しない変数は破棄するため、altText は除外して分割
       const [, , placeholder, id] = match;
       console.log("Debug: Found placeholder in markdown:", placeholder, "with id:", id);
       if (!placeholderToURL[placeholder]) {
@@ -283,11 +323,9 @@ const EditArticle: React.FC = () => {
         uploadPromises.push(p);
       }
     }
-
     await Promise.all(uploadPromises);
     const replaced = markdown.replace(
       placeholderRegex,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (m, altText, placeholder, id) => {
         const url = placeholderToURL[placeholder];
         console.log("Debug: Replacing placeholder", placeholder, "with URL:", url);
@@ -327,7 +365,6 @@ const EditArticle: React.FC = () => {
   ): Promise<string> => {
     const token = await fetchGithubToken();
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
-
     // 画像タイプを抽出
     const imageTypeMatch = originalHead.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
@@ -337,15 +374,12 @@ const EditArticle: React.FC = () => {
     const uniqueId = nanoid(10);
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
-
-    // base64Data に "data:image/xxx;base64," が含まれる場合は除去
+    // base64Data から "data:image/xxx;base64," を除去
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
-
     const payload = {
       message: `Add image: ${fileName}`,
       content: pureBase64,
     };
-
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
@@ -354,12 +388,10 @@ const EditArticle: React.FC = () => {
       },
       body: JSON.stringify(payload),
     });
-
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.message);
     }
-
     const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     console.log("Debug: GitHub uploaded URL:", uploadedUrl);
     return uploadedUrl;
@@ -371,14 +403,11 @@ const EditArticle: React.FC = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-
     setIsSubmitting(true);
     try {
       let content = markdownContent;
       // Markdown 内の画像プレースホルダーを GitHub 上の URL に置換する
       content = await processMarkdownContent(content);
-
-      // 既存記事のIDを用いて更新（merge オプションで上書き更新）
       if (!id) {
         throw new Error("記事IDが取得できません");
       }
@@ -392,10 +421,20 @@ const EditArticle: React.FC = () => {
           authorId: userId,
           authorAvatarUrl: userAvatar,
           editors: selectedEditors.map((ed) => ed.uid),
+          tags: selectedTags, // タグ情報を追加
         },
         { merge: true }
       );
-
+      // Firestore に存在しない新規タグがあれば登録する
+      for (const tag of selectedTags) {
+        if (!allTags.includes(tag)) {
+          try {
+            await setDoc(doc(db, "tags", tag), { name: tag });
+          } catch (err) {
+            console.error("タグの保存に失敗:", err);
+          }
+        }
+      }
       alert("記事を更新しました！");
       navigate("/");
     } catch (err) {
@@ -431,11 +470,81 @@ const EditArticle: React.FC = () => {
           />
         </div>
 
+        {/* タグ入力（既存タグから選択 or 新規作成） */}
+        <div className="form-group">
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">タグを追加</label>
+          <input
+            type="text"
+            placeholder="タグを検索または新規作成"
+            value={tagSearch}
+            onChange={(e) => setTagSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                const trimmed = tagSearch.trim();
+                if (trimmed !== "") {
+                  handleAddTag(trimmed);
+                }
+              }
+            }}
+            className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {tagSearch && (
+            <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
+              {allTags
+                .filter(
+                  (t) =>
+                    t.toLowerCase().includes(tagSearch.toLowerCase()) &&
+                    !selectedTags.includes(t)
+                )
+                .map((tag) => (
+                  <li
+                    key={tag}
+                    className="px-3 py-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                    onClick={() => handleAddTag(tag)}
+                  >
+                    {tag}
+                  </li>
+                ))}
+              {allTags.filter((t) => t.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                <li
+                  className="px-3 py-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                  onClick={() => handleAddTag(tagSearch)}
+                >
+                  新規タグ作成: {tagSearch}
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+
+        {/* 選択されたタグの表示 */}
+        {selectedTags.length > 0 && (
+          <div className="form-group">
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">選択されたタグ</label>
+            <ul className="space-y-2">
+              {selectedTags.map((tag) => (
+                <li
+                  key={tag}
+                  className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
+                >
+                  <span className="text-gray-800 dark:text-gray-100">{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* 編集者追加 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            編集者を追加
-          </label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">編集者を追加</label>
           <input
             type="text"
             placeholder="編集者を検索"
@@ -493,9 +602,7 @@ const EditArticle: React.FC = () => {
         {/* 選択された編集者の表示 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
-            <label className="block text-gray-700 dark:text-gray-300 mb-2">
-              現在の編集者
-            </label>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
             <ul className="space-y-2">
               {selectedEditors.map((editor) => (
                 <li
