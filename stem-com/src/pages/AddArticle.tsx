@@ -21,8 +21,6 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import ReactMarkdown from "react-markdown";
 // GitHub Flavored Markdown (GFM) を有効にするための remark プラグイン
 import remarkGfm from "remark-gfm";
-// Docusaurusのadmonitions構文をサポートするための remark プラグイン
-import remarkAdmonitions from "remark-admonitions";
 // コードブロックのシンタックスハイライト用コンポーネント
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -47,25 +45,33 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
-  const [tags, setTags] = useState<string>(""); // タグ入力用の状態（カンマ区切り）
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
-
-  const [allUsers, setAllUsers] = useState<UserData[]>([]);
+  // 編集者選択用状態
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-
+  // 画像アップロード用状態
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-
   // 画像のプレースホルダーと Base64 データの対応マッピング
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
-
   // 連打防止用の状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  // ユーザー認証情報用状態
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  // ----------------------------
+  // タグ選択用状態
+  // ----------------------------
+  // Firestore に保存済みの全タグ一覧（文字列配列）
+  const [allTags, setAllTags] = useState<string[]>([]);
+  // ユーザーが選択したタグ
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  // タグ検索・新規入力用の状態
+  const [tagSearch, setTagSearch] = useState<string>("");
 
   const navigate = useNavigate();
   const auth = getAuth();
@@ -111,6 +117,25 @@ const AddArticle: React.FC = () => {
     fetchUsers();
   }, []);
 
+  // Firestore から全タグ（"tags" コレクション）を取得する処理
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const tagsCol = collection(db, "tags");
+        const tagsSnapshot = await getDocs(tagsCol);
+        const tagsList = tagsSnapshot.docs.map((doc) => doc.data().name as string);
+        setAllTags(tagsList);
+        console.log("Debug: Fetched tags:", tagsList);
+      } catch (error) {
+        console.error("タグの取得に失敗:", error);
+      }
+    };
+    fetchTags();
+  }, []);
+
+  // 編集者情報用状態（ユーザー一覧）
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
+
   // ----------------------------
   // 編集者を追加する処理
   // ----------------------------
@@ -126,6 +151,26 @@ const AddArticle: React.FC = () => {
   // ----------------------------
   const handleRemoveEditor = (uid: string) => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
+  };
+
+  // ----------------------------
+  // タグを追加する処理
+  // ----------------------------
+  // 既存タグから選択、または新規作成としてタグを追加する
+  const handleAddTag = (tag: string) => {
+    const trimmedTag = tag.trim();
+    if (trimmedTag === "") return;
+    if (!selectedTags.includes(trimmedTag)) {
+      setSelectedTags([...selectedTags, trimmedTag]);
+    }
+    setTagSearch("");
+  };
+
+  // ----------------------------
+  // 選択されたタグを削除する処理
+  // ----------------------------
+  const handleRemoveTag = (tag: string) => {
+    setSelectedTags(selectedTags.filter((t) => t !== tag));
   };
 
   // ----------------------------
@@ -329,8 +374,8 @@ const AddArticle: React.FC = () => {
       const docRef = doc(db, "articles", articleId);
       const discordFlag = false;
 
-      // タグはカンマ区切りの入力から配列に変換
-      const tagsArray = tags.split(",").map(tag => tag.trim()).filter(tag => tag !== "");
+      // 選択されたタグをそのまま配列として利用
+      const tagsArray = selectedTags;
 
       await setDoc(docRef, {
         title,
@@ -343,11 +388,22 @@ const AddArticle: React.FC = () => {
         discord: discordFlag,
       });
 
+      // Firestore に存在しない新規タグがあれば登録する処理
+      for (const tag of selectedTags) {
+        if (!allTags.includes(tag)) {
+          try {
+            await setDoc(doc(db, "tags", tag), { name: tag });
+          } catch (err) {
+            console.error("タグの保存に失敗:", err);
+          }
+        }
+      }
+
       alert("記事を追加しました！");
       setTitle("");
       setMarkdownContent("");
-      setTags("");
       setSelectedEditors([]);
+      setSelectedTags([]);
       navigate("/");
     } catch (err) {
       console.error("エラー:", err);
@@ -375,18 +431,73 @@ const AddArticle: React.FC = () => {
           />
         </div>
 
-        {/* タグ入力 */}
+        {/* タグ入力（既存タグから選択 or 新規作成） */}
         <div className="form-group">
-          <label htmlFor="tags" className="block text-gray-700 dark:text-gray-300">タグ (カンマ区切り)</label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">タグを追加</label>
           <input
             type="text"
-            id="tags"
-            placeholder="例: React, Firebase, Markdown"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
+            placeholder="タグを検索または新規作成"
+            value={tagSearch}
+            onChange={(e) => setTagSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                const trimmed = tagSearch.trim();
+                if (trimmed !== "") {
+                  handleAddTag(trimmed);
+                }
+              }
+            }}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          {tagSearch && (
+            <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
+              {allTags
+                .filter((t) => t.toLowerCase().includes(tagSearch.toLowerCase()) && !selectedTags.includes(t))
+                .map((tag) => (
+                  <li
+                    key={tag}
+                    className="px-3 py-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                    onClick={() => handleAddTag(tag)}
+                  >
+                    {tag}
+                  </li>
+                ))}
+              {allTags.filter((t) => t.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                <li
+                  className="px-3 py-2 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                  onClick={() => handleAddTag(tagSearch)}
+                >
+                  新規タグ作成: {tagSearch}
+                </li>
+              )}
+            </ul>
+          )}
         </div>
+
+        {/* 選択されたタグの表示 */}
+        {selectedTags.length > 0 && (
+          <div className="form-group">
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">選択されたタグ</label>
+            <ul className="space-y-2">
+              {selectedTags.map((tag) => (
+                <li
+                  key={tag}
+                  className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
+                >
+                  <span className="text-gray-800 dark:text-gray-100">{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Discordチェックボックス（不要なら削除） */}
         <div className="form-group">
@@ -546,8 +657,8 @@ const AddArticle: React.FC = () => {
                   key={`${markdownContent}-${JSON.stringify(imageMapping)}`}
                 >
                   <ReactMarkdown
-                    // remarkPlugins に Docusaursの構文をサポートするプラグインを追加
-                    remarkPlugins={[remarkGfm, remarkAdmonitions]}
+                    // remarkPlugins に GFM をサポートするプラグインを追加
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       // カスタム画像レンダラー
                       img: ({ node, ...props }) => {
