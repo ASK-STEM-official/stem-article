@@ -10,6 +10,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc, // ユーザーXP更新用の updateDoc をインポート
   serverTimestamp,
   collection,
   getDocs,
@@ -434,6 +435,25 @@ const EditArticle: React.FC = () => {
             console.error("タグの保存に失敗:", err);
           }
         }
+      }
+      // ----------------------------
+      // XP計算処理（記事更新時にユーザーの xp とレベルを更新）
+      // ※最低 xp 10、文字数 ÷ 20 の切り捨て値で加算。必要に応じて加算量を調整してください。
+      // ----------------------------
+      if (userId) {
+        const userDocRef = doc(db, "users", userId);
+        const userDocSnap = await getDoc(userDocRef);
+        let currentXp = 0;
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          currentXp = userData.xp || 0;
+        }
+        const xpGain = Math.max(10, Math.floor(content.length / 20));
+        const newXp = currentXp + xpGain;
+        // xp 100 ごとに 1 レベルアップするシンプルな計算式
+        const newLevel = Math.floor(newXp / 100) + 1;
+        await updateDoc(userDocRef, { xp: newXp, level: newLevel });
+        console.log(`XP更新: +${xpGain} xp, 新しいXP: ${newXp}, 新しいレベル: ${newLevel}`);
       }
       alert("記事を更新しました！");
       navigate("/");

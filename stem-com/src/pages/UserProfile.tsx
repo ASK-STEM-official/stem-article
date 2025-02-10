@@ -1,4 +1,8 @@
 // src/pages/UserProfile.tsx
+// このコンポーネントはユーザープロフィールページを表示します。
+// ユーザー情報（表示名、アバター、自己紹介、アカウント作成日）に加え、
+// 経験値 (xp) とレベル、そして経験値バーを表示し、ライト/ダークテーマに対応させています。
+
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
@@ -8,18 +12,21 @@ import { User } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
+// ユーザープロフィールの型定義
 interface UserProfileData {
   displayName: string;
   avatarUrl?: string;
   bio?: string;
   createdAt?: { seconds: number };
+  xp?: number;      // 経験値
+  level?: number;   // レベル
 }
 
 const UserProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [userData, setUserData] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isCurrentUser, setIsCurrentUser] = useState<boolean>(false); // 自分のプロフィールかどうかを判定
+  const [isCurrentUser, setIsCurrentUser] = useState<boolean>(false); // 自分のプロフィールかどうかの判定
   const navigate = useNavigate();
   const auth = getAuth();
 
@@ -31,6 +38,7 @@ const UserProfile: React.FC = () => {
       }
 
       try {
+        // 現在ログイン中のユーザーと表示対象のユーザーが一致するかチェック
         const user = auth.currentUser;
         if (user && user.uid === id) {
           setIsCurrentUser(true);
@@ -38,6 +46,7 @@ const UserProfile: React.FC = () => {
           setIsCurrentUser(false);
         }
 
+        // Firestore からユーザードキュメントを取得
         const userDocRef = doc(db, "users", id);
         const userDocSnap = await getDoc(userDocRef);
         console.log(
@@ -61,6 +70,7 @@ const UserProfile: React.FC = () => {
     fetchUserData();
   }, [id, navigate, auth]);
 
+  // プロフィール編集画面へ遷移する処理
   const redirectToEditProfile = () => {
     navigate("/profileset");
   };
@@ -81,6 +91,12 @@ const UserProfile: React.FC = () => {
     );
   }
 
+  // 経験値とレベルのデフォルト値（未設定の場合）
+  const xp = userData.xp || 0;
+  const level = userData.level || 1;
+  // 次のレベルまでの必要 xp は 100 とし、進捗率は xp の 100 に対する割合（％）で計算
+  const progressPercent = Math.min((xp % 100), 100);
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-lg overflow-hidden dark:bg-gray-800 p-8">
@@ -92,7 +108,7 @@ const UserProfile: React.FC = () => {
               className="h-16 w-16 rounded-full"
             />
           ) : (
-            <User className="h-16 w-16" />
+            <User className="h-16 w-16 text-gray-500" />
           )}
           <div className="flex-1">
             <div className="flex items-center space-x-2">
@@ -113,13 +129,29 @@ const UserProfile: React.FC = () => {
             {userData.createdAt && (
               <p className="text-gray-500 dark:text-gray-400">
                 アカウント作成日:{" "}
-                {format(
-                  new Date(userData.createdAt.seconds * 1000),
-                  "PPP",
-                  { locale: ja }
-                )}
+                {format(new Date(userData.createdAt.seconds * 1000), "PPP", {
+                  locale: ja,
+                })}
               </p>
             )}
+          </div>
+        </div>
+
+        {/* 経験値・レベル表示セクション */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            <span className="text-lg font-semibold text-gray-900 dark:text-white">
+              レベル: {level}
+            </span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {xp % 100} / 100 XP
+            </span>
+          </div>
+          <div className="w-full bg-gray-300 dark:bg-gray-600 rounded-full h-3 mt-1">
+            <div
+              className="bg-indigo-600 h-3 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            ></div>
           </div>
         </div>
 
@@ -132,7 +164,7 @@ const UserProfile: React.FC = () => {
           </div>
         )}
 
-        {/* 他に表示したい情報があればここに追加 */}
+        {/* 表示したいその他の情報があればここに追加 */}
       </div>
     </div>
   );
