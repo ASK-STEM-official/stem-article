@@ -33,6 +33,7 @@ import Navbar from "./components/Navbar.tsx";
 import { Github } from "lucide-react";
 import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
+import Rank from "./pages/rank.tsx";
 
 interface UserData {
   avatarUrl: string;
@@ -308,6 +309,8 @@ const App = () => {
           <Route path="/profileset" element={<Profileset user={user} />} />
           {/* 記事編集ページ */}
           <Route path="/articles/:id/edit" element={<EditArticle />} />
+          {/* ランキングページ */}
+          <Route path="/rank" element={<Rank />} />
 
           {/* トップページ -> 記事一覧 */}
           <Route path="/" element={<ArticleList />} />
