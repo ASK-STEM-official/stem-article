@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, PenLine, BookOpen, LogOut, Sun, Moon, User as UserIcon } from 'lucide-react';
+import { Menu, X, PenLine, BookOpen, LogOut, Sun, Moon, User as UserIcon, TrendingUp } from 'lucide-react';
 import { getUserTheme, setUserTheme } from '../lib/firebase/firestore.ts';
 
 interface NavbarProps {
@@ -74,6 +74,10 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
         <Link to="/add-article" className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700">
           <PenLine className="h-5 w-5" />
           <span>新規投稿</span>
+        </Link>
+        <Link to="/rank" className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700">
+          <TrendingUp className="h-5 w-5" />
+          <span>ランキング</span>
         </Link>
         <div className="flex-grow"></div>
         <button onClick={onLogout} className="flex items-center space-x-2 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors">
