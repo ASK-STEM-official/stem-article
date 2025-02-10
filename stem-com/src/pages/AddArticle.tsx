@@ -11,6 +11,7 @@ import {
   collection,
   getDocs,
   getDoc,
+  updateDoc, // ユーザーの経験値更新用に updateDoc を追加
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
 import { nanoid } from "nanoid"; // ユニークID生成用ライブラリ
@@ -37,7 +38,8 @@ interface UserData {
 /**
  * AddArticle コンポーネント
  * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加、画像のアップロード、タグ付け機能を行い、
- * Firestore に記事を保存します。
+ * Firestore に記事を保存します。また、記事投稿時にユーザーの経験値（xp）を、記事の文字数に応じて加算し、
+ * 経験値に基づいてレベルを更新します。
  */
 const AddArticle: React.FC = () => {
   // ----------------------------
@@ -370,6 +372,7 @@ const AddArticle: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      // Markdown コンテンツ中の画像プレースホルダーをアップロード後の URL に置換
       let content = markdownContent;
       content = await processMarkdownContent(content);
 
@@ -399,6 +402,27 @@ const AddArticle: React.FC = () => {
             console.error("タグの保存に失敗:", err);
           }
         }
+      }
+
+      // ----------------------------
+      // ユーザーの経験値とレベルを更新する処理
+      // ----------------------------
+      // ※記事の最終的な内容（URL置換後の文字数）に応じて xp を加算
+      if (userId) {
+        const userDocRef = doc(db, "users", userId);
+        const userDocSnap = await getDoc(userDocRef);
+        let currentXp = 0;
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          currentXp = userData.xp || 0;
+        }
+        // 文字数に応じた xp 加算（例：最低 xp 10、文字数 ÷ 20 の切り捨て値を xp に加算）
+        const xpGain = Math.max(30, Math.floor(content.length / 10));
+        const newXp = currentXp + xpGain;
+        // レベルは xp が 100 ごとに 1 レベルアップするシンプルな計算式（例：xp 0〜99: レベル1, 100〜199: レベル2, ...）
+        const newLevel = Math.floor(newXp / 100) + 1;
+        await updateDoc(userDocRef, { xp: newXp, level: newLevel });
+        console.log(`Debug: User ${userId} gained ${xpGain} xp, new xp: ${newXp}, new level: ${newLevel}`);
       }
 
       alert("記事を追加しました！");
