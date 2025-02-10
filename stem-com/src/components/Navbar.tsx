@@ -93,7 +93,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
           {/* ロゴとタイトル */}
           <Link to="/" className="flex items-center space-x-3">
             <BookOpen className="h-8 w-8" />
-            <span className="font-bold text-xl">Club Blog</span>
+            <span className="font-bold text-xl">STEM研究部記事投稿サイト</span>
           </Link>
           
           {/* ナビゲーションメニュー */}

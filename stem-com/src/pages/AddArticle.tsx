@@ -73,6 +73,9 @@ const AddArticle: React.FC = () => {
   // タグ検索・新規入力用の状態
   const [tagSearch, setTagSearch] = useState<string>("");
 
+  // Discord 紹介用の状態（チェックボックスの値を管理）
+  const [discordFlag, setDiscordFlag] = useState<boolean>(false);
+
   const navigate = useNavigate();
   const auth = getAuth();
 
@@ -372,7 +375,6 @@ const AddArticle: React.FC = () => {
 
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
-      const discordFlag = false;
 
       // 選択されたタグをそのまま配列として利用
       const tagsArray = selectedTags;
@@ -385,7 +387,7 @@ const AddArticle: React.FC = () => {
         authorId: userId,
         authorAvatarUrl: userAvatar,
         editors: selectedEditors.map((ed) => ed.uid),
-        discord: discordFlag,
+        discord: discordFlag, // Discord 紹介用のフラグを保存
       });
 
       // Firestore に存在しない新規タグがあれば登録する処理
@@ -499,15 +501,16 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* Discordチェックボックス（不要なら削除） */}
+        {/* Discordチェックボックス */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
             Discordに紹介する
+            {/* チェックボックスの状態管理：状態変数 discordFlag を利用 */}
             <input
               type="checkbox"
               className="ml-2"
-              checked={false}
-              readOnly
+              checked={discordFlag}
+              onChange={(e) => setDiscordFlag(e.target.checked)}
             />
           </label>
         </div>
