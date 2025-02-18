@@ -1,42 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X, PenLine, BookOpen, LogOut, Sun, Moon, User as UserIcon, TrendingUp } from 'lucide-react';
-import { getUserTheme, setUserTheme } from '../lib/firebase/firestore.ts';
 
 interface NavbarProps {
   user: any;
   onLogout: () => void;
+  toggleDarkMode: () => void;
+  darkMode: boolean;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
-  const [darkMode, setDarkMode] = useState<boolean>(false);
+const Navbar: React.FC<NavbarProps> = ({ user, onLogout, toggleDarkMode, darkMode }) => {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    const initializeTheme = async () => {
-      if (user) {
-        const userTheme = await getUserTheme(user.uid);
-        if (userTheme === 'dark') {
-          setDarkMode(true);
-          document.documentElement.classList.add('dark');
-        } else {
-          setDarkMode(false);
-          document.documentElement.classList.remove('dark');
-        }
-      } else {
-        const storedTheme = localStorage.getItem('theme');
-        setDarkMode(storedTheme === 'dark');
-        document.documentElement.classList.toggle('dark', storedTheme === 'dark');
-      }
-    };
-    initializeTheme();
-  }, [user]);
-
-  const toggleDarkMode = async () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle('dark', !darkMode);
-    user ? await setUserTheme(user.uid, darkMode ? 'light' : 'dark') : localStorage.setItem('theme', darkMode ? 'light' : 'dark');
-  };
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
 
@@ -61,7 +35,11 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
               {darkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
             </button>
             {user && user.avatarUrl ? (
-              <img src={user.avatarUrl} alt={user.displayName} className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md" />
+              <img
+                src={user.avatarUrl}
+                alt={user.displayName}
+                className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md"
+              />
             ) : (
               <UserIcon className="h-8 w-8 text-gray-400" />
             )}

@@ -1,8 +1,3 @@
-// src/App.tsx
-// このファイルはReactアプリケーションのエントリーポイントです。
-// GitHubログインによる認証と指定した組織チェックを行った後、Firestoreにユーザーデータを保存・取得します。
-// また、firebaseのログインキャッシュを利用して自動ログインを実現しています。
-
 import React, { useState, useEffect } from "react";
 import {
   HashRouter as Router,
@@ -18,13 +13,13 @@ import {
   GithubAuthProvider,
   signOut,
   onAuthStateChanged,
-} from "firebase/auth"; // Firebase Authentication用の関数をインポート
+} from "firebase/auth"; // Firebase Authentication 用の関数をインポート
 import {
   getFirestore,
   doc,
   setDoc,
   getDoc,
-} from "firebase/firestore"; // Firestore用
+} from "firebase/firestore"; // Firestore 用
 import ArticleList from "./pages/ArticleList.tsx";
 import Profileset from "./pages/Profile-set.tsx";
 import ArticleDetail from "./pages/ArticleDetail.tsx";
@@ -34,6 +29,7 @@ import { Github } from "lucide-react";
 import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
 import Rank from "./pages/rank.tsx";
+import SeriesArticles from "./pages/SeriesList.tsx"; 
 
 interface UserData {
   avatarUrl: string;
@@ -43,17 +39,17 @@ interface UserData {
 }
 
 const App = () => {
-  // Firestoreから取得したユーザーデータを保持するstate
+  // Firestore から取得したユーザーデータを保持する state
   const [user, setUser] = useState<UserData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // ダークモード管理用の state
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
-  // 認証状態の初期化中フラグ（firebaseの自動ログイン確認中に利用）
+  // 認証状態の初期化中フラグ（firebase の自動ログイン確認中に利用）
   const [initializing, setInitializing] = useState<boolean>(true);
 
-  // 初回マウント時にOSのダークモード設定を反映させる
+  // 初回マウント時に OS のダークモード設定を反映させる
   useEffect(() => {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     setDarkMode(prefersDark);
@@ -65,14 +61,14 @@ const App = () => {
   }, []);
 
   /**
-   * firebaseの認証キャッシュを利用した自動ログイン処理
-   * onAuthStateChangedで認証状態の変化を監視し、ログイン済みの場合はFirestoreからユーザーデータを取得します。
+   * firebase の認証キャッシュを利用した自動ログイン処理
+   * onAuthStateChanged で認証状態の変化を監視し、ログイン済みの場合は Firestore からユーザーデータを取得します。
    */
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // 既にログイン済みの場合、Firestoreからユーザーデータを取得して状態を更新
+        // 既にログイン済みの場合、Firestore からユーザーデータを取得して状態を更新
         const userData = await fetchUserData(firebaseUser.uid);
         if (userData) {
           setUser(userData);
@@ -84,26 +80,25 @@ const App = () => {
   }, []);
 
   /**
-   * GitHub認証ボタンを押下した際のイベントハンドラ。
-   * Firebase Authの signInWithPopup を使ってGitHubログインを行い、
+   * GitHub 認証ボタンを押下した際のイベントハンドラ。
+   * Firebase Auth の signInWithPopup を使って GitHub ログインを行い、
    * ログイン後に取得したトークンで組織所属を確認します。
-   * 所属が確認できたら、Firestoreにユーザーデータを保存・取得します。
+   * 所属が確認できたら、Firestore にユーザーデータを保存・取得します。
    */
   const handleGitHubLogin = async () => {
     try {
       const auth = getAuth();
-      // firebaseの認証キャッシュ（local persistence）を明示的に設定
+      // firebase の認証キャッシュ（local persistence）を明示的に設定
       await setPersistence(auth, browserLocalPersistence);
 
       const provider = new GithubAuthProvider();
-
       // 組織の情報を取得するために "read:org" スコープを追加
       provider.addScope("read:org");
 
-      // ポップアップでGitHubログイン
+      // ポップアップで GitHub ログイン
       const result = await signInWithPopup(auth, provider);
 
-      // 取得したCredentialからアクセストークンを取り出す
+      // 取得した Credential からアクセストークンを取り出す
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = credential?.accessToken;
 
@@ -111,7 +106,7 @@ const App = () => {
         throw new Error("アクセストークンを取得できませんでした。");
       }
 
-      // GitHub APIを呼び出してユーザーが所属している組織を取得
+      // GitHub API を呼び出してユーザーが所属している組織を取得
       const orgResponse = await fetch("https://api.github.com/user/orgs", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -119,7 +114,7 @@ const App = () => {
       });
 
       if (!orgResponse.ok) {
-        throw new Error("GitHub APIへのリクエストが失敗しました。");
+        throw new Error("GitHub API へのリクエストが失敗しました。");
       }
 
       const organizations = await orgResponse.json();
@@ -141,7 +136,7 @@ const App = () => {
         throw new Error("指定された組織に所属していません。ログインを許可できません。");
       }
     } catch (error: any) {
-      console.error("GitHubログインエラー:", error);
+      console.error("GitHub ログインエラー:", error);
       setErrorMessage(
         error.message || "ログインに失敗しました。もう一度試してください。"
       );
@@ -151,14 +146,13 @@ const App = () => {
   const saveUserData = async (firebaseUser: any, token: string) => {
     try {
       const db = getFirestore();
-
       // Firebase Auth のユーザーIDをドキュメントIDにする
       const userRef = doc(db, "users", firebaseUser.uid);
 
       // すでにユーザードキュメントがあるかどうかをチェック
       const existingDoc = await getDoc(userRef);
 
-      // GitHub APIを使用してユーザーの詳細情報を取得
+      // GitHub API を使用してユーザーの詳細情報を取得
       const userResponse = await fetch("https://api.github.com/user", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -166,11 +160,10 @@ const App = () => {
       });
 
       if (!userResponse.ok) {
-        throw new Error("GitHub APIからユーザー情報の取得に失敗しました。");
+        throw new Error("GitHub API からユーザー情報の取得に失敗しました。");
       }
 
       const githubUser = await userResponse.json();
-
       const githubAvatar = githubUser.avatar_url || "";
       const githubDisplayName = githubUser.name || githubUser.login || "";
 
@@ -198,7 +191,6 @@ const App = () => {
       const db = getFirestore();
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
-
       if (userSnap.exists()) {
         return userSnap.data() as UserData;
       } else {
@@ -246,7 +238,7 @@ const App = () => {
   }
 
   /**
-   * ログインしていない場合は、GitHubログインボタンのみ表示する。
+   * ログインしていない場合は、GitHub ログインボタンのみ表示する。
    * 組織に所属していない/ログインに失敗した場合は、エラーメッセージを表示する。
    */
   if (!user) {
@@ -260,7 +252,6 @@ const App = () => {
             STEM研究部専用の記事投稿・共有プラットフォーム
           </p>
         </div>
-
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10">
             <button
@@ -270,7 +261,6 @@ const App = () => {
               <Github className="h-5 w-5 mr-2" />
               GitHubでログイン
             </button>
-
             {errorMessage && (
               <div className="mt-4 text-sm text-red-600 text-center">
                 {errorMessage}
@@ -303,18 +293,18 @@ const App = () => {
           <Route path="/add-article" element={<AddArticle />} />
           {/* 記事詳細ページ */}
           <Route path="/articles/:id" element={<ArticleDetail />} />
+          {/* 記事編集ページ */}
+          <Route path="/articles/:id/edit" element={<EditArticle />} />
           {/* ユーザープロフィールページ */}
           <Route path="/users/:id" element={<UserProfile />} />
           {/* プロフィール設定ページ */}
           <Route path="/profileset" element={<Profileset user={user} />} />
-          {/* 記事編集ページ */}
-          <Route path="/articles/:id/edit" element={<EditArticle />} />
           {/* ランキングページ */}
           <Route path="/rank" element={<Rank />} />
-
+          {/* シリーズ詳細ページ：クリックされたシリーズのIDをもとにシリーズ内の記事一覧を表示 */}
+          <Route path="/series/:id" element={<SeriesArticles />} />
           {/* トップページ -> 記事一覧 */}
           <Route path="/" element={<ArticleList />} />
-
           {/* 存在しないページはトップにリダイレクト（404用） */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

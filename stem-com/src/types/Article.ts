@@ -7,5 +7,6 @@ export interface Article {
     created_at?: { seconds: number; nanoseconds: number };
     discord?: boolean;
     editors?: string[];
+    tags?: string[]; 
   }
   
