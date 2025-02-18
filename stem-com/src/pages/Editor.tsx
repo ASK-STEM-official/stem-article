@@ -54,7 +54,7 @@ export interface EditorProps {
   // 画像アップロードモーダル管理用プロパティ
   showImageModal: boolean;
   setShowImageModal: (value: boolean) => void;
-  selectedImageFile: File | null;
+  // selectedImageFile プロパティは使用されていないため削除
   onImageFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isUploading: boolean;
   handleUploadImage: () => void;
@@ -95,7 +95,7 @@ const ArticleEditor: React.FC<EditorProps> = (props) => {
     textareaRef,
     showImageModal,
     setShowImageModal,
-    selectedImageFile,
+    // selectedImageFile を削除
     onImageFileChange,
     isUploading,
     handleUploadImage,

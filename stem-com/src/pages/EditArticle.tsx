@@ -34,6 +34,10 @@ interface Article {
   tags?: string[];
 }
 
+// EditArticle コンポーネントは、記事の編集処理を行います。
+// URL パラメータから記事IDを取得し、Firestore から記事情報を読み込み、
+// ユーザーが記事の内容を編集できるようにします。
+// また、タグ・編集者の管理、画像アップロード機能、ユーザー経験値の更新なども実装しています。
 const EditArticle: React.FC = () => {
   // URL パラメータから記事IDを取得
   const { id } = useParams<{ id: string }>();
@@ -50,7 +54,7 @@ const EditArticle: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState<string>("");
 
-  // 画像アップロード関連
+  // 画像アップロード関連の状態
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -214,7 +218,7 @@ const EditArticle: React.FC = () => {
         setIsUploading(false);
         return;
       }
-      const base64Data = result.trim();
+      // 画像データを利用する場合は、result.trim() を使用してください
       const id = nanoid(6);
       const placeholder = `/images/${id}`;
       const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
