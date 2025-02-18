@@ -17,8 +17,10 @@ import { db } from "../lib/firebase/db.ts";
 import { nanoid } from "nanoid"; // ユニークID生成用
 import { useNavigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-import ArticleEditor, { UserData } from "./Editor.tsx" // 共通エディタコンポーネントの読み込み
+import ArticleEditor, { UserData } from "./Editor.tsx"; // 共通エディタコンポーネントの読み込み
 
+// この関数コンポーネントは、記事投稿ページのロジックを担当しています。
+// ユーザー認証、タグ・編集者の管理、画像アップロード、記事の保存やユーザー経験値の更新などを行います。
 const AddArticle: React.FC = () => {
   // 各種状態管理
   const [title, setTitle] = useState<string>("");
@@ -155,7 +157,8 @@ const AddArticle: React.FC = () => {
         setIsUploading(false);
         return;
       }
-      const base64Data = result.trim();
+      // 画像データを利用する場合は、以下のように result.trim() の結果を使用してください
+      // 例: const base64Data = result.trim();
       const id = nanoid(6);
       const placeholder = `/images/${id}`;
       // 画像用の Markdown 記法を本文に追加
