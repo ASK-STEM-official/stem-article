@@ -16,8 +16,14 @@ import {
 } from 'lucide-react';
 import { getUserTheme, setUserTheme } from '../lib/firebase/firestore.ts';
 
+interface UserData {
+  uid: string;
+  avatarUrl?: string;
+  displayName?: string;
+}
+
 interface NavbarProps {
-  user: any;
+  user: UserData | null;   // ユーザー情報の型を明確に
   onLogout: () => void;
 }
 
@@ -28,6 +34,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
   useEffect(() => {
     const initializeTheme = async () => {
       if (user) {
+        // ログイン中のユーザー用: Firestore からテーマを取得
         const userTheme = await getUserTheme(user.uid);
         if (userTheme === 'dark') {
           setDarkMode(true);
@@ -37,6 +44,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
           document.documentElement.classList.remove('dark');
         }
       } else {
+        // ログインしていない場合: localStorage からテーマを取得
         const storedTheme = localStorage.getItem('theme');
         setDarkMode(storedTheme === 'dark');
         document.documentElement.classList.toggle('dark', storedTheme === 'dark');
@@ -49,8 +57,10 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
     setDarkMode(!darkMode);
     document.documentElement.classList.toggle('dark', !darkMode);
     if (user) {
+      // ログイン中なら Firestore にテーマを保存
       await setUserTheme(user.uid, darkMode ? 'light' : 'dark');
     } else {
+      // 未ログインなら localStorage に保存
       localStorage.setItem('theme', darkMode ? 'light' : 'dark');
     }
   };
@@ -78,13 +88,27 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
             <button onClick={toggleDarkMode}>
               {darkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
             </button>
-            {user && user.avatarUrl ? (
-              <img
-                src={user.avatarUrl}
-                alt={user.displayName}
-                className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md"
-              />
+            
+            {/* ユーザーがログイン中の場合 */}
+            {user ? (
+              <Link to={`/users/${user.uid}`} className="flex items-center space-x-2">
+                {/* アバター or デフォルトアイコン */}
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.displayName || 'User'}
+                    className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md"
+                  />
+                ) : (
+                  <UserIcon className="h-8 w-8 text-gray-400" />
+                )}
+                {/* ユーザー名を表示（存在する場合） */}
+                {user.displayName && (
+                  <span className="font-medium">{user.displayName}</span>
+                )}
+              </Link>
             ) : (
+              // ログインしていない場合
               <UserIcon className="h-8 w-8 text-gray-400" />
             )}
           </div>

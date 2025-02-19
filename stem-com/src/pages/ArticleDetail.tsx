@@ -10,8 +10,16 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import remarkDirective from "remark-directive"; // remark-directive をインポート
 import { visit } from "unist-util-visit";
-import { Calendar, User, Edit, Info, FileText, Lightbulb, AlertTriangle, Flame } from "lucide-react"; 
-// ↑ ここでアイコンをまとめてインポート
+import {
+  Calendar,
+  User,
+  Edit,
+  Info,
+  FileText,
+  Lightbulb,
+  AlertTriangle,
+  Flame,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Article } from "../types/Article";
@@ -27,9 +35,11 @@ interface UserData {
   avatarUrl?: string;
 }
 
-// Admonition コンポーネント（Tailwind CSS を使用したテーマ対応版）
-// タイプ別にアイコンを割り当て、左側に表示する
-const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({ type, children }) => {
+// Admonition コンポーネント
+const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({
+  type,
+  children,
+}) => {
   let containerClasses = "";
   let headerColorClass = "";
   let IconComponent = <Info className="w-5 h-5" />; // デフォルトは Info アイコン
@@ -45,28 +55,24 @@ const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({ typ
       containerClasses =
         "bg-purple-100 dark:bg-purple-900 border-purple-500 dark:border-purple-400 text-purple-800 dark:text-purple-200";
       headerColorClass = "text-purple-800 dark:text-purple-200";
-      // 「ノート」のイメージとして FileText アイコンを割り当て
       IconComponent = <FileText className="w-5 h-5" />;
       break;
     case "tip":
       containerClasses =
         "bg-green-100 dark:bg-green-900 border-green-500 dark:border-green-400 text-green-800 dark:text-green-200";
       headerColorClass = "text-green-800 dark:text-green-200";
-      // 「ヒント」のイメージとして Lightbulb アイコンを割り当て
       IconComponent = <Lightbulb className="w-5 h-5" />;
       break;
     case "caution":
       containerClasses =
         "bg-yellow-100 dark:bg-yellow-900 border-yellow-500 dark:border-yellow-400 text-yellow-800 dark:text-yellow-200";
       headerColorClass = "text-yellow-800 dark:text-yellow-200";
-      // 「注意」のイメージとして AlertTriangle アイコンを割り当て
       IconComponent = <AlertTriangle className="w-5 h-5" />;
       break;
     case "danger":
       containerClasses =
         "bg-red-100 dark:bg-red-900 border-red-500 dark:border-red-400 text-red-800 dark:text-red-200";
       headerColorClass = "text-red-800 dark:text-red-200";
-      // 「危険」のイメージとして Flame アイコンを割り当て
       IconComponent = <Flame className="w-5 h-5" />;
       break;
     default:
@@ -78,13 +84,10 @@ const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({ typ
   }
 
   return (
-    // flex + space-x-2 でアイコンとテキストを横並びに
-    <div className={`p-4 border-l-4 rounded-md mb-4 flex items-start space-x-2 ${containerClasses}`}>
-      {/* アイコン部分 */}
-      <div className={`mt-1 ${headerColorClass}`}>
-        {IconComponent}
-      </div>
-      {/* テキスト部分 */}
+    <div
+      className={`p-4 border-l-4 rounded-md mb-4 flex items-start space-x-2 ${containerClasses}`}
+    >
+      <div className={`mt-1 ${headerColorClass}`}>{IconComponent}</div>
       <div>
         <strong className={`block mb-2 font-bold ${headerColorClass}`}>
           {type.toUpperCase()}
@@ -99,14 +102,14 @@ const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({ typ
 const remarkAdmonitionsPlugin = () => {
   return (tree: any) => {
     visit(tree, (node) => {
-      // Markdown 内のコンテナディレクティブ（:::info など）を検出
+      // :::info などの記法を検出
       if (node.type === "containerDirective") {
-        // node.name に admonition の種類 (info, note, tip, caution, danger) が入る
         const type = node.name;
         if (!node.data) node.data = {};
-        // HTML 出力時に div タグに変換し、クラス名を付与
         node.data.hName = "div";
-        node.data.hProperties = { className: `admonition admonition-${type}` };
+        node.data.hProperties = {
+          className: `admonition admonition-${type}`,
+        };
       }
     });
   };
@@ -171,7 +174,8 @@ const ArticleDetail: React.FC = () => {
                 return editorDoc.exists()
                   ? {
                       uid: editorDoc.id,
-                      displayName: editorDoc.data().displayName || "ユーザー",
+                      displayName:
+                        editorDoc.data().displayName || "ユーザー",
                       avatarUrl: editorDoc.data().avatarUrl || undefined,
                     }
                   : {
@@ -225,7 +229,7 @@ const ArticleDetail: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <article className="bg-white rounded-lg shadow-lg overflow-hidden dark:bg-gray-800 p-8">
+      <article className="bg-white rounded-lg shadow-lg dark:bg-gray-800 p-8">
         <div className="flex justify-between items-start">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
             {article.title}
@@ -261,11 +265,9 @@ const ArticleDetail: React.FC = () => {
             <Calendar className="h-4 w-4" />
             <span>
               {article.created_at?.seconds
-                ? format(
-                    new Date(article.created_at.seconds * 1000),
-                    "PPP",
-                    { locale: ja }
-                  )
+                ? format(new Date(article.created_at.seconds * 1000), "PPP", {
+                    locale: ja,
+                  })
                 : "不明な日付"}
             </span>
           </div>
@@ -273,41 +275,46 @@ const ArticleDetail: React.FC = () => {
 
         <div className="prose prose-indigo max-w-none dark:prose-dark mt-8">
           <ReactMarkdown
-            // remark-directive + カスタムプラグインで Admonitions を認識
             remarkPlugins={[remarkGfm, remarkDirective, remarkAdmonitionsPlugin]}
             components={{
-              // コードブロックのシンタックスハイライト設定
-              code({
-                inline,
-                className,
-                children,
-                ...props
-              }: any) {
+              // コードブロックのシンタックスハイライト + 言語ラベル表示
+              code({ inline, className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || "");
-                return !inline && match ? (
-                  <SyntaxHighlighter
-                    style={vscDarkPlus}
-                    language={match[1]}
-                    PreTag="pre"
-                    {...props}
-                  >
-                    {String(children).trim()}
-                  </SyntaxHighlighter>
-                ) : (
-                  <code className={className} {...props}>
-                    {children}
-                  </code>
-                );
+                const codeString = Array.isArray(children)
+                  ? children.join("")
+                  : children;
+
+                if (!inline && match) {
+                  // 言語ラベルを表示
+                  return (
+                    <div className="relative my-4">
+                      {/* ラベル部分 */}
+                      <div className="absolute right-2 top-2 text-xs bg-gray-800 text-white px-2 py-0.5 rounded">
+                        {match[1]}
+                      </div>
+                      <SyntaxHighlighter
+                        style={vscDarkPlus}
+                        language={match[1]}
+                        PreTag="div"
+                        {...props}
+                      >
+                        {String(codeString).replace(/\n$/, "")}
+                      </SyntaxHighlighter>
+                    </div>
+                  );
+                } else {
+                  // インラインコード、または言語指定なし
+                  return (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
               },
-              // admonition 用の div をカスタムレンダリング
+              // Admonition 用の div をカスタムレンダリング
               div({ node, className, ...props }) {
                 if (className && className.startsWith("admonition")) {
-                  // className は "admonition admonition-〇〇" の形式となるため、
-                  // "admonition-" 部分を除いた文字列を type とする
-                  const type = className.replace(
-                    "admonition admonition-",
-                    ""
-                  );
+                  const type = className.replace("admonition admonition-", "");
                   return (
                     <Admonition type={type} {...props}>
                       {props.children}

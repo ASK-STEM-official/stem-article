@@ -235,7 +235,7 @@ const App = () => {
       document.documentElement.classList.remove("dark");
     }
   };
-  
+
   // 認証状態の初期化中はローディング表示を行う
   if (initializing) {
     return (
