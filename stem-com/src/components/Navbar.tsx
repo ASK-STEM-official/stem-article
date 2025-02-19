@@ -1,3 +1,4 @@
+
 // Navbar.tsx
 // ユーザー情報と各種アイコンを表示するナビバーコンポーネント。画面上部に固定表示されます。
 
@@ -19,10 +20,11 @@ import { getUserTheme, setUserTheme } from '../lib/firebase/firestore.ts';
 interface NavbarProps {
   user: any;
   onLogout: () => void;
+  toggleDarkMode: () => void;
+  darkMode: boolean;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
-  const [darkMode, setDarkMode] = useState<boolean>(false);
+const Navbar: React.FC<NavbarProps> = ({ user, onLogout, toggleDarkMode, darkMode }) => {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -54,7 +56,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
       localStorage.setItem('theme', darkMode ? 'light' : 'dark');
     }
   };
-
   const toggleMenu = () => setMenuOpen(!menuOpen);
 
   return (
