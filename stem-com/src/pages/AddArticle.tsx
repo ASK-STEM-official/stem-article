@@ -11,8 +11,7 @@ import {
   updateDoc,
   collection,
   getDocs,
-  getDoc,
-  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
 import { nanoid } from "nanoid";
