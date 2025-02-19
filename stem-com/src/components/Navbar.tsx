@@ -1,6 +1,19 @@
+// Navbar.tsx
+// ユーザー情報と各種アイコンを表示するナビバーコンポーネント。画面上部に固定表示されます。
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, PenLine, BookOpen, LogOut, Sun, Moon, User as UserIcon, TrendingUp } from 'lucide-react';
+import {
+  Menu,
+  X,
+  PenLine,
+  BookOpen,
+  LogOut,
+  Sun,
+  Moon,
+  User as UserIcon,
+  TrendingUp,
+} from 'lucide-react';
 import { getUserTheme, setUserTheme } from '../lib/firebase/firestore.ts';
 
 interface NavbarProps {
@@ -35,13 +48,18 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
   const toggleDarkMode = async () => {
     setDarkMode(!darkMode);
     document.documentElement.classList.toggle('dark', !darkMode);
-    user ? await setUserTheme(user.uid, darkMode ? 'light' : 'dark') : localStorage.setItem('theme', darkMode ? 'light' : 'dark');
+    if (user) {
+      await setUserTheme(user.uid, darkMode ? 'light' : 'dark');
+    } else {
+      localStorage.setItem('theme', darkMode ? 'light' : 'dark');
+    }
   };
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
 
   return (
-    <nav className="bg-indigo-600 text-white shadow-lg dark:bg-gray-800 relative">
+    // fixedクラスを追加して画面上部に固定、z-50で重なり順を調整
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-indigo-600 text-white shadow-lg dark:bg-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* ハンバーガーメニューとタイトル */}
@@ -61,7 +79,11 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
               {darkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
             </button>
             {user && user.avatarUrl ? (
-              <img src={user.avatarUrl} alt={user.displayName} className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md" />
+              <img
+                src={user.avatarUrl}
+                alt={user.displayName}
+                className="h-10 w-10 rounded-full object-cover border-2 border-indigo-600 shadow-md"
+              />
             ) : (
               <UserIcon className="h-8 w-8 text-gray-400" />
             )}
@@ -70,17 +92,30 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
       </div>
       
       {/* メニュー（スマートフォンと同じ表示をPCにも適用） */}
-      <div className={`fixed top-16 left-0 w-64 bg-indigo-700 dark:bg-gray-900 transition-transform duration-300 ease-in-out transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} p-4 flex flex-col h-[calc(100vh-4rem)]`}>
-        <Link to="/add-article" className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700">
+      <div
+        className={`fixed top-16 left-0 w-64 bg-indigo-700 dark:bg-gray-900 transition-transform duration-300 ease-in-out transform ${
+          menuOpen ? 'translate-x-0' : '-translate-x-full'
+        } p-4 flex flex-col h-[calc(100vh-4rem)]`}
+      >
+        <Link
+          to="/add-article"
+          className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700"
+        >
           <PenLine className="h-5 w-5" />
           <span>新規投稿</span>
         </Link>
-        <Link to="/rank" className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700">
+        <Link
+          to="/rank"
+          className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700"
+        >
           <TrendingUp className="h-5 w-5" />
           <span>ランキング</span>
         </Link>
         <div className="flex-grow"></div>
-        <button onClick={onLogout} className="flex items-center space-x-2 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors">
+        <button
+          onClick={onLogout}
+          className="flex items-center space-x-2 px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors"
+        >
           <LogOut className="h-5 w-5" />
           <span>ログアウト</span>
         </button>
