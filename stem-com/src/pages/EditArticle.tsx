@@ -1,39 +1,25 @@
-<<<<<<< HEAD
-// AddArticle.tsx
-// このコンポーネントは記事投稿用ページです。
-// タイトル、Markdown形式の本文、編集者の追加、画像アップロード機能、タグ付け機能を実装し、Firestoreに記事を保存します。
-=======
 // EditArticle.tsx
-// この記事編集ページは、指定された記事ID の記事内容を Firestore から取得し、
-// タイトル、Markdown 本文、編集者の追加・削除、タグ付け、画像アップロード機能などを実装しています。
-// 共通の編集UI部分は ArticleEditor（editor.tsx）を利用して実装しています。
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+// このコンポーネントは記事編集用のページです。
+// 指定された記事IDの内容をFirestoreから取得し、タイトル、Markdown形式の本文、
+// 編集者の追加・削除、画像アップロード、タグ付け機能を提供します。
+// 更新前にMarkdown内の画像プレースホルダーをGitHub上の画像URLに置換してから更新を行います。
 
 import React, { useState, useEffect, FormEvent } from "react";
-// Firebase Firestore 関連のインポート
+import { useParams, useNavigate } from "react-router-dom";
 import {
   doc,
+  getDoc,
   setDoc,
-<<<<<<< HEAD
-=======
   updateDoc,
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   serverTimestamp,
   collection,
   getDocs,
-  getDoc,
-  updateDoc,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
-<<<<<<< HEAD
 import { nanoid } from "nanoid"; // ユニークID生成用ライブラリ
-import { useNavigate } from "react-router-dom";
-// Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-// Markdown のリアルタイムプレビュー用ライブラリ（Editor.tsx 内で利用）
 // 共通のエディタコンポーネントのインポート
 import Editor from "./Editor.tsx";
-import "../AddArticle.css";
 
 // ユーザー情報の型定義
 interface UserData {
@@ -42,30 +28,7 @@ interface UserData {
   avatarUrl: string;
 }
 
-/**
- * AddArticle コンポーネント
- * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加、画像アップロード、タグ付け機能を行い、
- * Firestore に記事を保存します。また、記事投稿時にユーザーの経験値（xp）を、記事の文字数に応じて加算し、
- * 経験値に基づいてレベルを更新します。
- */
-const AddArticle: React.FC = () => {
-  // ----------------------------
-  // 各種状態管理
-  // ----------------------------
-  const [title, setTitle] = useState<string>("");
-  const [markdownContent, setMarkdownContent] = useState<string>("");
-
-  // 編集者選択用状態
-  const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
-  const [editorSearch, setEditorSearch] = useState<string>("");
-
-  // タグ選択用状態
-=======
-import { nanoid } from "nanoid"; // ユニークID生成用
-import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-import ArticleEditor, { UserData } from "./Editor.tsx"; // 共通エディタコンポーネントの読み込み
-
-// 記事情報の型定義
+// 記事の型定義（タグ情報等を含む）
 interface Article {
   id: string;
   title: string;
@@ -80,61 +43,49 @@ interface Article {
   tags?: string[];
 }
 
-// EditArticle コンポーネントは、記事の編集処理を行います。
-// URL パラメータから記事IDを取得し、Firestore から記事情報を読み込み、
-// ユーザーが記事の内容を編集できるようにします。
-// また、タグ・編集者の管理、画像アップロード機能、ユーザー経験値の更新なども実装しています。
+/**
+ * EditArticle コンポーネント
+ * 記事編集ページ。指定された記事IDの内容をFirestoreから取得し、タイトル、Markdown形式の本文、
+ * 編集者の追加・削除、画像アップロード、タグ付け機能を提供します。
+ * 更新前にMarkdown内の画像プレースホルダーをGitHub上の画像URLに置換してから更新します。
+ */
 const EditArticle: React.FC = () => {
-  // URL パラメータから記事IDを取得
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const auth = getAuth();
 
+  // ----------------------------
   // 各種状態管理
+  // ----------------------------
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
+
+  // ユーザー認証情報
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  // 編集者関連の状態
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
-  const [allUsers, setAllUsers] = useState<UserData[]>([]);
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+
+  // タグ関連の状態
   const [allTags, setAllTags] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState<string>("");
-
-<<<<<<< HEAD
-  // Discord 紹介用の状態
-  const [discordFlag, setDiscordFlag] = useState<boolean>(false);
 
   // 画像のプレースホルダーとBase64データの対応マッピング
   const [imageMapping, setImageMapping] = useState<{
     [key: string]: { base64: string; filename: string };
   }>({});
 
-  // ユーザー情報状態
-  const [allUsers, setAllUsers] = useState<UserData[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  // 連打防止用の状態
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const navigate = useNavigate();
   const auth = getAuth();
 
   // ----------------------------
-=======
-  // 画像アップロード関連の状態
-  const [showImageModal, setShowImageModal] = useState<boolean>(false);
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // ユーザー認証情報
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
-
-  // Markdown 入力エリア参照
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   // FirebaseAuth のログイン状態監視
+  // ----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
@@ -148,38 +99,30 @@ const EditArticle: React.FC = () => {
     return () => unsubscribe();
   }, [auth]);
 
-<<<<<<< HEAD
   // ----------------------------
-  // Firestore の users コレクション取得
+  // Firestore の users コレクションから全ユーザー取得
   // ----------------------------
-=======
-  // ユーザー一覧の取得
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         const usersCol = collection(db, "users");
         const userSnapshot = await getDocs(usersCol);
-        const usersList = userSnapshot.docs.map((doc) => ({
+        const usersList: UserData[] = userSnapshot.docs.map((doc) => ({
           uid: doc.id,
           displayName: doc.data().displayName,
           avatarUrl: doc.data().avatarUrl,
         }));
         setAllUsers(usersList);
       } catch (error) {
-        console.error("ユーザーの取得に失敗:", error);
+        console.error("ユーザーの取得に失敗しました:", error);
       }
     };
     fetchUsers();
   }, []);
 
-<<<<<<< HEAD
   // ----------------------------
-  // Firestore の tags コレクション取得
+  // Firestore の tags コレクションから全タグ取得
   // ----------------------------
-=======
-  // タグ一覧の取得
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   useEffect(() => {
     const fetchTags = async () => {
       try {
@@ -188,18 +131,15 @@ const EditArticle: React.FC = () => {
         const tagsList = tagsSnapshot.docs.map((doc) => doc.data().name as string);
         setAllTags(tagsList);
       } catch (error) {
-        console.error("タグの取得に失敗しました:", error);
+        console.error("タグの取得に失敗:", error);
       }
     };
     fetchTags();
   }, []);
 
-<<<<<<< HEAD
   // ----------------------------
-  // 編集者の追加・削除処理
+  // 編集対象の記事をFirestoreから取得
   // ----------------------------
-=======
-  // 編集対象の記事を Firestore から取得
   useEffect(() => {
     const fetchArticle = async () => {
       if (!id) {
@@ -243,22 +183,9 @@ const EditArticle: React.FC = () => {
     fetchArticle();
   }, [id, navigate]);
 
-  // タグ追加／削除のハンドラ
-  const handleAddTag = (tag: string) => {
-    const trimmed = tag.trim();
-    if (trimmed === "") return;
-    if (!selectedTags.includes(trimmed)) {
-      setSelectedTags([...selectedTags, trimmed]);
-    }
-    setTagSearch("");
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    setSelectedTags(selectedTags.filter((t) => t !== tag));
-  };
-
-  // 編集者追加／削除のハンドラ
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+  // ----------------------------
+  // 編集者の追加・削除処理
+  // ----------------------------
   const handleAddEditor = (user: UserData) => {
     if (!selectedEditors.some((editor) => editor.uid === user.uid)) {
       setSelectedEditors([...selectedEditors, user]);
@@ -270,7 +197,6 @@ const EditArticle: React.FC = () => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
-<<<<<<< HEAD
   // ----------------------------
   // タグの追加・削除処理
   // ----------------------------
@@ -331,7 +257,7 @@ const EditArticle: React.FC = () => {
   };
 
   /**
-   * Firestore から GitHub トークンを取得する処理
+   * FirestoreからGitHubトークンを取得する処理
    * @returns GitHubトークン文字列
    */
   async function fetchGithubToken(): Promise<string> {
@@ -344,7 +270,7 @@ const EditArticle: React.FC = () => {
           return data.key as string;
         }
       }
-      console.error("GitHub トークンのドキュメントが見つかりません");
+      console.error("GitHubトークンのドキュメントが見つかりません");
       return "";
     } catch (err) {
       console.error("GitHubトークン取得エラー:", err);
@@ -353,7 +279,7 @@ const EditArticle: React.FC = () => {
   }
 
   /**
-   * GitHub に Base64画像をアップロードする処理
+   * GitHubにBase64画像をアップロードする処理
    * @param base64Data Base64形式の画像データ
    * @param originalHead 元のデータヘッダー文字列
    * @returns アップロード後の画像URL
@@ -400,85 +326,16 @@ const EditArticle: React.FC = () => {
   };
 
   /**
-   * フォーム送信時の処理（記事投稿）
+   * フォーム送信時の処理（記事更新）
    */
-=======
-  // テキストエディタのカーソル位置に文字列を挿入する処理
-  const insertAtCursor = (text: string) => {
-    if (!textareaRef.current) return;
-    const { selectionStart, selectionEnd } = textareaRef.current;
-    const before = markdownContent.slice(0, selectionStart);
-    const after = markdownContent.slice(selectionEnd);
-    const updated = before + text + after;
-    setMarkdownContent(updated);
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.selectionStart = selectionStart + text.length;
-        textareaRef.current.selectionEnd = selectionStart + text.length;
-      }
-    }, 0);
-  };
-
-  // 画像アップロード処理
-  const handleUploadImage = () => {
-    if (!selectedImageFile) {
-      alert("画像ファイルを選択してください。");
-      return;
-    }
-    if (isUploading) return;
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (!result || typeof result !== "string" || result.trim() === "") {
-        alert("画像の読み込みに失敗しました。ファイルが無効です。");
-        setIsUploading(false);
-        return;
-      }
-      // 画像データを利用する場合は、result.trim() を使用してください
-      const id = nanoid(6);
-      const placeholder = `/images/${id}`;
-      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
-      setMarkdownContent((prev) => prev + imageMarkdown);
-      setShowImageModal(false);
-      setSelectedImageFile(null);
-      setIsUploading(false);
-    };
-    reader.onerror = () => {
-      alert("画像の読み込みに失敗しました。");
-      setIsUploading(false);
-    };
-    reader.readAsDataURL(selectedImageFile);
-  };
-
-  // 記事更新時の処理
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
-<<<<<<< HEAD
-      // Markdown本文中の画像プレースホルダーをアップロード後のURLに置換
       let content = markdownContent;
+      // Markdown本文中の画像プレースホルダーをGitHub上の画像URLに置換
       content = await processMarkdownContent(content);
-
-      const articleId = nanoid(10);
-      const docRef = doc(db, "articles", articleId);
-
-      await setDoc(docRef, {
-        title,
-        content,
-        tags: selectedTags,
-        created_at: serverTimestamp(),
-        authorId: userId,
-        authorAvatarUrl: userAvatar,
-        editors: selectedEditors.map((ed) => ed.uid),
-        discord: discordFlag,
-      });
-
-      // Firestore に存在しない新規タグがあれば登録する処理
-=======
-      const content = markdownContent; // ※画像プレースホルダーの処理等は必要に応じて追加
       if (!id) throw new Error("記事IDが取得できません");
       const docRef = doc(db, "articles", id);
       await setDoc(
@@ -494,8 +351,7 @@ const EditArticle: React.FC = () => {
         },
         { merge: true }
       );
-      // 新規タグの保存
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+      // Firestoreに存在しない新規タグがあれば登録
       for (const tag of selectedTags) {
         if (!allTags.includes(tag)) {
           try {
@@ -505,12 +361,7 @@ const EditArticle: React.FC = () => {
           }
         }
       }
-<<<<<<< HEAD
-
-      // ユーザーの経験値とレベルを更新する処理
-=======
-      // XP計算処理（例：最低 xp 10、文字数 ÷ 20 の切り捨て値）
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+      // ユーザーの経験値とレベル更新処理
       if (userId) {
         const userDocRef = doc(db, "users", userId);
         const userDocSnap = await getDoc(userDocRef);
@@ -519,29 +370,24 @@ const EditArticle: React.FC = () => {
           const userData = userDocSnap.data();
           currentXp = userData.xp || 0;
         }
-        const xpGain = Math.max(30, Math.floor(content.length / 10));
+        const xpGain = Math.max(10, Math.floor(content.length / 20));
         const newXp = currentXp + xpGain;
         const newLevel = Math.floor(newXp / 100) + 1;
         await updateDoc(userDocRef, { xp: newXp, level: newLevel });
       }
-
-      alert("記事を追加しました！");
-      // 入力フォームのリセット
-      setTitle("");
-      setMarkdownContent("");
-      setSelectedEditors([]);
-      setSelectedTags([]);
+      alert("記事を更新しました！");
       navigate("/");
     } catch (err) {
       console.error("エラー:", err);
-      alert("記事の投稿に失敗しました。");
+      alert("記事の更新に失敗しました。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
-<<<<<<< HEAD
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を編集</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
@@ -630,19 +476,6 @@ const EditArticle: React.FC = () => {
             </ul>
           </div>
         )}
-
-        {/* Discordチェックボックス */}
-        <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            Discordに紹介する
-            <input
-              type="checkbox"
-              className="ml-2"
-              checked={discordFlag}
-              onChange={(e) => setDiscordFlag(e.target.checked)}
-            />
-          </label>
-        </div>
 
         {/* 編集者追加 */}
         <div className="form-group">
@@ -742,51 +575,16 @@ const EditArticle: React.FC = () => {
           setImageMapping={setImageMapping}
         />
 
-=======
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を編集</h1>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <ArticleEditor
-          title={title}
-          onTitleChange={(e) => setTitle(e.target.value)}
-          tagSearch={tagSearch}
-          onTagSearchChange={(e) => setTagSearch(e.target.value)}
-          allTags={allTags}
-          selectedTags={selectedTags}
-          onAddTag={handleAddTag}
-          onRemoveTag={handleRemoveTag}
-          // EditArticle では Discord 紹介は不要のためプロパティは渡さない
-          editorSearch={editorSearch}
-          onEditorSearchChange={(e) => setEditorSearch(e.target.value)}
-          allUsers={allUsers}
-          selectedEditors={selectedEditors}
-          onAddEditor={handleAddEditor}
-          onRemoveEditor={handleRemoveEditor}
-          markdownContent={markdownContent}
-          onMarkdownContentChange={(e) => setMarkdownContent(e.target.value)}
-          onInsertAtCursor={insertAtCursor}
-          textareaRef={textareaRef}
-          showImageModal={showImageModal}
-          setShowImageModal={setShowImageModal}
-          selectedImageFile={selectedImageFile}
-          onImageFileChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              setSelectedImageFile(e.target.files[0]);
-            }
-          }}
-          isUploading={isUploading}
-          handleUploadImage={handleUploadImage}
-        />
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
         <button
           type="submit"
-          disabled={false}
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          disabled={isSubmitting}
+          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
         >
-          投稿
+          更新
         </button>
       </form>
     </div>
   );
 };
 
-export default AddArticle;
+export default EditArticle;

@@ -1,17 +1,9 @@
 // AddArticle.tsx
-<<<<<<< HEAD
 // このコンポーネントは記事投稿用ページです。
 // タイトル、Markdown形式の本文、編集者の追加、画像アップロード機能、タグ付け機能を実装し、Firestoreに記事を保存します。
 
 import React, { useState, useEffect, FormEvent } from "react";
 // Firebase Firestore 関連のインポート
-=======
-// この記事コンテナは、記事投稿用のページです。
-// ユーザー認証、タグ・編集者の取得、画像アップロード、経験値更新などのロジックを持ち、
-// 共通の編集UI部分は ArticleEditor（editor.tsx）を利用して実装しています。
-
-import React, { useState, useEffect, FormEvent, useRef } from "react";
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
 import {
   doc,
   setDoc,
@@ -22,14 +14,12 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
-import { nanoid } from "nanoid"; // ユニークID生成用
+import { nanoid } from "nanoid"; // ユニークID生成用ライブラリ
 import { useNavigate } from "react-router-dom";
+// Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-<<<<<<< HEAD
-// Markdown のリアルタイムプレビュー用ライブラリ（Editor.tsx 内で利用）
 // 共通のエディタコンポーネントのインポート
 import Editor from "./Editor.tsx";
-import "../AddArticle.css";
 
 // ユーザー情報の型定義
 interface UserData {
@@ -40,21 +30,16 @@ interface UserData {
 
 /**
  * AddArticle コンポーネント
- * 記事投稿ページ。タイトル、Markdown 形式の本文、編集者の追加、画像アップロード、タグ付け機能を行い、
- * Firestore に記事を保存します。また、記事投稿時にユーザーの経験値（xp）を、記事の文字数に応じて加算し、
+ * 記事投稿ページ。タイトル、Markdown形式の本文、編集者の追加、画像アップロード、タグ付け機能を行い、
+ * Firestoreに記事を保存します。また、記事投稿時にユーザーの経験値（xp）を記事の文字数に応じて加算し、
  * 経験値に基づいてレベルを更新します。
  */
-=======
-import ArticleEditor, { UserData } from "./Editor.tsx"; // 共通エディタコンポーネントの読み込み
-
-// この関数コンポーネントは、記事投稿ページのロジックを担当しています。
-// ユーザー認証、タグ・編集者の管理、画像アップロード、記事の保存やユーザー経験値の更新などを行います。
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
 const AddArticle: React.FC = () => {
+  // ----------------------------
   // 各種状態管理
+  // ----------------------------
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
-<<<<<<< HEAD
 
   // 編集者選択用状態
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
@@ -75,38 +60,15 @@ const AddArticle: React.FC = () => {
 
   // ユーザー情報状態
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
-=======
-  const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
-  const [editorSearch, setEditorSearch] = useState<string>("");
-  const [allUsers, setAllUsers] = useState<UserData[]>([]);
-  const [allTags, setAllTags] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagSearch, setTagSearch] = useState<string>("");
-  const [discordFlag, setDiscordFlag] = useState<boolean>(false);
-
-  // 画像アップロード関連の状態
-  const [showImageModal, setShowImageModal] = useState<boolean>(false);
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  // ※画像マッピングなどの詳細処理は必要に応じて追加してください
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // ユーザー認証情報
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   const [userId, setUserId] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const auth = getAuth();
 
-<<<<<<< HEAD
   // ----------------------------
-=======
-  // Markdown 入力エリア参照
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   // FirebaseAuth のログイン状態監視
+  // ----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
@@ -120,32 +82,30 @@ const AddArticle: React.FC = () => {
     return () => unsubscribe();
   }, [auth]);
 
-  // ユーザー一覧の取得
+  // ----------------------------
+  // Firestore の users コレクション取得
+  // ----------------------------
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         const usersCol = collection(db, "users");
         const userSnapshot = await getDocs(usersCol);
-        const usersList: UserData[] = userSnapshot.docs.map((doc) => ({
+        const usersList = userSnapshot.docs.map((doc) => ({
           uid: doc.id,
           displayName: doc.data().displayName,
           avatarUrl: doc.data().avatarUrl,
         }));
         setAllUsers(usersList);
       } catch (error) {
-        console.error("ユーザーの取得に失敗しました:", error);
+        console.error("ユーザーの取得に失敗:", error);
       }
     };
     fetchUsers();
   }, []);
 
-<<<<<<< HEAD
   // ----------------------------
   // Firestore の tags コレクション取得
   // ----------------------------
-=======
-  // タグ一覧の取得
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   useEffect(() => {
     const fetchTags = async () => {
       try {
@@ -154,33 +114,15 @@ const AddArticle: React.FC = () => {
         const tagsList = tagsSnapshot.docs.map((doc) => doc.data().name as string);
         setAllTags(tagsList);
       } catch (error) {
-        console.error("タグの取得に失敗しました:", error);
+        console.error("タグの取得に失敗:", error);
       }
     };
     fetchTags();
   }, []);
 
-<<<<<<< HEAD
   // ----------------------------
   // 編集者の追加・削除処理
   // ----------------------------
-=======
-  // タグ追加／削除のハンドラ
-  const handleAddTag = (tag: string) => {
-    const trimmed = tag.trim();
-    if (trimmed === "") return;
-    if (!selectedTags.includes(trimmed)) {
-      setSelectedTags([...selectedTags, trimmed]);
-    }
-    setTagSearch("");
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    setSelectedTags(selectedTags.filter((t) => t !== tag));
-  };
-
-  // 編集者追加／削除のハンドラ
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
   const handleAddEditor = (user: UserData) => {
     if (!selectedEditors.some((editor) => editor.uid === user.uid)) {
       setSelectedEditors([...selectedEditors, user]);
@@ -192,7 +134,6 @@ const AddArticle: React.FC = () => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
-<<<<<<< HEAD
   // ----------------------------
   // タグの追加・削除処理
   // ----------------------------
@@ -253,7 +194,7 @@ const AddArticle: React.FC = () => {
   };
 
   /**
-   * Firestore から GitHub トークンを取得する処理
+   * FirestoreからGitHubトークンを取得する処理
    * @returns GitHubトークン文字列
    */
   async function fetchGithubToken(): Promise<string> {
@@ -266,7 +207,7 @@ const AddArticle: React.FC = () => {
           return data.key as string;
         }
       }
-      console.error("GitHub トークンのドキュメントが見つかりません");
+      console.error("GitHubトークンのドキュメントが見つかりません");
       return "";
     } catch (err) {
       console.error("GitHubトークン取得エラー:", err);
@@ -275,7 +216,7 @@ const AddArticle: React.FC = () => {
   }
 
   /**
-   * GitHub に Base64画像をアップロードする処理
+   * GitHubにBase64画像をアップロードする処理
    * @param base64Data Base64形式の画像データ
    * @param originalHead 元のデータヘッダー文字列
    * @returns アップロード後の画像URL
@@ -334,70 +275,6 @@ const AddArticle: React.FC = () => {
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
 
-=======
-  // テキストエディタのカーソル位置に文字列を挿入する処理
-  const insertAtCursor = (text: string) => {
-    if (!textareaRef.current) return;
-    const { selectionStart, selectionEnd } = textareaRef.current;
-    const before = markdownContent.slice(0, selectionStart);
-    const after = markdownContent.slice(selectionEnd);
-    const updated = before + text + after;
-    setMarkdownContent(updated);
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.selectionStart = selectionStart + text.length;
-        textareaRef.current.selectionEnd = selectionStart + text.length;
-      }
-    }, 0);
-  };
-
-  // 画像アップロード処理（画像ファイルを Base64 変換して Markdown にプレースホルダーを追加）
-  const handleUploadImage = () => {
-    if (!selectedImageFile) {
-      alert("画像ファイルを選択してください。");
-      return;
-    }
-    if (isUploading) return;
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (!result || typeof result !== "string" || result.trim() === "") {
-        alert("画像の読み込みに失敗しました。ファイルが無効です。");
-        setIsUploading(false);
-        return;
-      }
-      // 画像データを利用する場合は、以下のように result.trim() の結果を使用してください
-      // 例: const base64Data = result.trim();
-      const id = nanoid(6);
-      const placeholder = `/images/${id}`;
-      // 画像用の Markdown 記法を本文に追加
-      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
-      setMarkdownContent((prev) => prev + imageMarkdown);
-      // ※画像データの保存処理（imageMapping など）は必要に応じて追加してください
-      setShowImageModal(false);
-      setSelectedImageFile(null);
-      setIsUploading(false);
-    };
-    reader.onerror = () => {
-      alert("画像の読み込みに失敗しました。");
-      setIsUploading(false);
-    };
-    reader.readAsDataURL(selectedImageFile);
-  };
-
-  // 記事投稿時の処理
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      // Markdown 内の画像プレースホルダーの処理などを行った後（ここでは省略）
-      const content = markdownContent; // ※必要に応じて画像URLの置換処理を追加
-      const articleId = nanoid(10);
-      const docRef = doc(db, "articles", articleId);
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
       await setDoc(docRef, {
         title,
         content,
@@ -408,7 +285,8 @@ const AddArticle: React.FC = () => {
         editors: selectedEditors.map((ed) => ed.uid),
         discord: discordFlag,
       });
-      // 新規タグの保存処理
+
+      // Firestoreに存在しない新規タグがあれば登録
       for (const tag of selectedTags) {
         if (!allTags.includes(tag)) {
           try {
@@ -418,12 +296,8 @@ const AddArticle: React.FC = () => {
           }
         }
       }
-<<<<<<< HEAD
 
-      // ユーザーの経験値とレベルを更新する処理
-=======
-      // ユーザーの経験値とレベル更新処理（例：最低 xp 30、文字数 ÷ 10 の切り捨て値を xp に加算）
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+      // ユーザーの経験値とレベル更新処理
       if (userId) {
         const userDocRef = doc(db, "users", userId);
         const userDocSnap = await getDoc(userDocRef);
@@ -436,17 +310,10 @@ const AddArticle: React.FC = () => {
         const newXp = currentXp + xpGain;
         const newLevel = Math.floor(newXp / 100) + 1;
         await updateDoc(userDocRef, { xp: newXp, level: newLevel });
-<<<<<<< HEAD
-=======
-        console.log(`XP更新: +${xpGain} xp, 新しいXP: ${newXp}, 新しいレベル: ${newLevel}`);
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
       }
+
       alert("記事を追加しました！");
-<<<<<<< HEAD
-      // 入力フォームのリセット
-=======
-      // 各状態のリセット
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
+      // 入力フォームリセット
       setTitle("");
       setMarkdownContent("");
       setSelectedEditors([]);
@@ -462,7 +329,6 @@ const AddArticle: React.FC = () => {
     <div className="max-w-2xl mx-auto p-4 bg-lightBackground dark:bg-darkBackground min-h-screen">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">記事を追加</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
-<<<<<<< HEAD
         {/* タイトル入力 */}
         <div className="form-group">
           <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
@@ -662,40 +528,6 @@ const AddArticle: React.FC = () => {
           setImageMapping={setImageMapping}
         />
 
-=======
-        <ArticleEditor
-          title={title}
-          onTitleChange={(e) => setTitle(e.target.value)}
-          tagSearch={tagSearch}
-          onTagSearchChange={(e) => setTagSearch(e.target.value)}
-          allTags={allTags}
-          selectedTags={selectedTags}
-          onAddTag={handleAddTag}
-          onRemoveTag={handleRemoveTag}
-          discordFlag={discordFlag}
-          onDiscordFlagChange={(e) => setDiscordFlag(e.target.checked)}
-          editorSearch={editorSearch}
-          onEditorSearchChange={(e) => setEditorSearch(e.target.value)}
-          allUsers={allUsers}
-          selectedEditors={selectedEditors}
-          onAddEditor={handleAddEditor}
-          onRemoveEditor={handleRemoveEditor}
-          markdownContent={markdownContent}
-          onMarkdownContentChange={(e) => setMarkdownContent(e.target.value)}
-          onInsertAtCursor={insertAtCursor}
-          textareaRef={textareaRef}
-          showImageModal={showImageModal}
-          setShowImageModal={setShowImageModal}
-          selectedImageFile={selectedImageFile}
-          onImageFileChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              setSelectedImageFile(e.target.files[0]);
-            }
-          }}
-          isUploading={isUploading}
-          handleUploadImage={handleUploadImage}
-        />
->>>>>>> d04c71f22131422236ddbb5988b51464c5d23a92
         <button
           type="submit"
           disabled={false}
