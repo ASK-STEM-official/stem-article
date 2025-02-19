@@ -14,7 +14,6 @@ import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import Editor from "./Editor.tsx";
-import "../AddArticle.css";
 
 // ユーザー情報の型定義
 interface UserData {
