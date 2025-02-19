@@ -1,16 +1,19 @@
+// ArticleDetail.tsx
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom"; 
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
 import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import remarkGfm from 'remark-gfm';
-import { Calendar, User, Edit } from 'lucide-react'; 
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import { Article } from '../types/Article'; 
-import Editors from "../components/Editors.tsx"; // 編集者表示コンポーネントのインポート
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import remarkGfm from "remark-gfm";
+import remarkDirective from "remark-directive"; // remark-directive をインポート
+import { visit } from "unist-util-visit";
+import { Calendar, User, Edit } from "lucide-react";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
+import { Article } from "../types/Article";
+import Editors from "../components/Editors.tsx";
 
 // Firebase Authentication
 import { getAuth, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
@@ -20,6 +23,55 @@ interface UserData {
   displayName: string;
   avatarUrl?: string;
 }
+
+// Tailwind CSS を用いた Admonition コンポーネント（ライト／ダークテーマ対応）
+const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({ type, children }) => {
+  // type に応じた Tailwind のクラスを設定
+  let classes = "";
+  switch (type) {
+    case "info":
+      classes = "bg-blue-100 dark:bg-blue-900 border-blue-500 dark:border-blue-400 text-blue-800 dark:text-blue-200";
+      break;
+    case "note":
+      classes = "bg-purple-100 dark:bg-purple-900 border-purple-500 dark:border-purple-400 text-purple-800 dark:text-purple-200";
+      break;
+    case "tip":
+      classes = "bg-green-100 dark:bg-green-900 border-green-500 dark:border-green-400 text-green-800 dark:text-green-200";
+      break;
+    case "caution":
+      classes = "bg-yellow-100 dark:bg-yellow-900 border-yellow-500 dark:border-yellow-400 text-yellow-800 dark:text-yellow-200";
+      break;
+    case "danger":
+      classes = "bg-red-100 dark:bg-red-900 border-red-500 dark:border-red-400 text-red-800 dark:text-red-200";
+      break;
+    default:
+      classes = "bg-gray-100 dark:bg-gray-900 border-gray-500 dark:border-gray-400 text-gray-800 dark:text-gray-200";
+      break;
+  }
+  return (
+    <div className={`p-4 border-l-4 rounded-md ${classes} mb-4`}>
+      <strong className="block mb-2">{type.toUpperCase()}</strong>
+      <div>{children}</div>
+    </div>
+  );
+};
+
+// remark-directive を利用したカスタムプラグイン
+const remarkAdmonitionsPlugin = () => {
+  return (tree: any) => {
+    visit(tree, (node) => {
+      // Markdown 内のコンテナディレクティブ（:::info など）を検出
+      if (node.type === "containerDirective") {
+        // node.name に admonition の種類 (info, note, tip, caution, danger) が入る
+        const type = node.name;
+        if (!node.data) node.data = {};
+        // HTML 出力時に div タグに変換し、クラス名を付与
+        node.data.hName = "div";
+        node.data.hProperties = { className: `admonition admonition-${type}` };
+      }
+    });
+  };
+};
 
 const ArticleDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -98,18 +150,25 @@ const ArticleDetail: React.FC = () => {
   }, [id, navigate, auth]);
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-    </div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
   }
 
   if (!article) {
-    return <div className="max-w-3xl mx-auto px-4 py-8">
-      <p className="text-center text-gray-600 dark:text-gray-400">記事が見つかりません。</p>
-    </div>;
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <p className="text-center text-gray-600 dark:text-gray-400">記事が見つかりません。</p>
+      </div>
+    );
   }
 
-  const canEdit = () => (currentUser?.uid && (currentUser.uid === article.authorId || article.editors?.includes(currentUser.uid))) || false;
+  const canEdit = () =>
+    (currentUser?.uid &&
+      (currentUser.uid === article.authorId || article.editors?.includes(currentUser.uid))) ||
+    false;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -117,8 +176,12 @@ const ArticleDetail: React.FC = () => {
         <div className="flex justify-between items-start">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">{article.title}</h1>
           {canEdit() && (
-            <Link to={`/articles/${article.id}/edit`} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 flex items-center">
-              <Edit className="h-5 w-5 mr-1" />編集
+            <Link
+              to={`/articles/${article.id}/edit`}
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 flex items-center"
+            >
+              <Edit className="h-5 w-5 mr-1" />
+              編集
             </Link>
           )}
         </div>
@@ -126,30 +189,63 @@ const ArticleDetail: React.FC = () => {
           <div className="flex items-center space-x-2">
             {author?.avatarUrl ? (
               <Link to={`/users/${author.uid}`}>
-                <img src={author.avatarUrl} alt={`${author.displayName}のアバター`} className="h-6 w-6 rounded-full object-cover" loading="lazy" />
+                <img
+                  src={author.avatarUrl}
+                  alt={`${author.displayName}のアバター`}
+                  className="h-6 w-6 rounded-full object-cover"
+                  loading="lazy"
+                />
               </Link>
-            ) : <User className="h-6 w-6 text-gray-400" />}
+            ) : (
+              <User className="h-6 w-6 text-gray-400" />
+            )}
             <span>{author?.displayName || "ユーザー"}</span>
             <Editors editors={editors} showNames={false} />
           </div>
           <div className="flex items-center space-x-1">
             <Calendar className="h-4 w-4" />
-            <span>{article.created_at?.seconds ? format(new Date(article.created_at.seconds * 1000), 'PPP', { locale: ja }) : "不明な日付"}</span>
+            <span>
+              {article.created_at?.seconds
+                ? format(new Date(article.created_at.seconds * 1000), "PPP", { locale: ja })
+                : "不明な日付"}
+            </span>
           </div>
         </div>
         <div className="prose prose-indigo max-w-none dark:prose-dark mt-8">
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkDirective, remarkAdmonitionsPlugin]}
             components={{
+              // コードブロックのシンタックスハイライト設定
               code({ inline, className, children, ...props }: any) {
-                const match = /language-(\w+)/.exec(className || '');
+                const match = /language-(\w+)/.exec(className || "");
                 return !inline && match ? (
-                  <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
-                    {String(children).replace(/\n$/, '')}
+                  <SyntaxHighlighter
+                    style={vscDarkPlus}
+                    language={match[1]}
+                    PreTag="pre"
+                    {...props}
+                  >
+                    {String(children).trim()}
                   </SyntaxHighlighter>
                 ) : (
-                  <code className={className} {...props}>{children}</code>
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
                 );
+              },
+              // admonition 用の div をカスタムレンダリング
+              div({ node, className, ...props }) {
+                if (className && className.startsWith("admonition")) {
+                  // className は "admonition admonition-〇〇" の形式となるため、
+                  // "admonition-" 部分を除いた文字列をタイプとする
+                  const type = className.replace("admonition admonition-", "");
+                  return (
+                    <Admonition type={type} {...props}>
+                      {props.children}
+                    </Admonition>
+                  );
+                }
+                return <div {...props} />;
               }
             }}
           >
