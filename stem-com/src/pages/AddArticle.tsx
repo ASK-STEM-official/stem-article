@@ -1,24 +1,19 @@
-// AddArticle.tsx
-// このコンポーネントは記事投稿用ページです。
-// タイトル、Markdown形式の本文、編集者の追加、画像アップロード機能、タグ付け機能を実装し、Firestoreに記事を保存します。
-
 import React, { useState, useEffect, FormEvent } from "react";
-// Firebase Firestore 関連のインポート
 import {
   doc,
   setDoc,
-  serverTimestamp,
-  collection,
-  getDocs,
   getDoc,
   updateDoc,
+  collection,
+  getDocs,
+  onSnapshot,
+  serverTimestamp,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
-import { nanoid } from "nanoid"; // ユニークID生成用ライブラリ
+import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
-// Firebase Authentication 関連のインポート
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-// 共通のエディタコンポーネントのインポート
 import Editor from "./Editor.tsx";
 
 // ユーザー情報の型定義
@@ -28,47 +23,47 @@ interface UserData {
   avatarUrl: string;
 }
 
-/**
- * AddArticle コンポーネント
- * 記事投稿ページ。タイトル、Markdown形式の本文、編集者の追加、画像アップロード、タグ付け機能を行い、
- * Firestoreに記事を保存します。また、記事投稿時にユーザーの経験値（xp）を記事の文字数に応じて加算し、
- * 経験値に基づいてレベルを更新します。
- */
 const AddArticle: React.FC = () => {
-  // ----------------------------
-  // 各種状態管理
-  // ----------------------------
+  // 記事タイトル・本文
   const [title, setTitle] = useState<string>("");
   const [markdownContent, setMarkdownContent] = useState<string>("");
 
-  // 編集者選択用状態
+  // 編集者選択用
   const [selectedEditors, setSelectedEditors] = useState<UserData[]>([]);
   const [editorSearch, setEditorSearch] = useState<string>("");
 
-  // タグ選択用状態
+  // 画像アップロード用
+  const [showImageModal, setShowImageModal] = useState<boolean>(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imageMapping, setImageMapping] = useState<{ [key: string]: { base64: string; filename: string } }>({});
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // ユーザー認証情報
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  // タグ用
   const [allTags, setAllTags] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState<string>("");
 
-  // Discord 紹介用の状態
+  // Discordフラグ
   const [discordFlag, setDiscordFlag] = useState<boolean>(false);
 
-  // 画像のプレースホルダーとBase64データの対応マッピング
-  const [imageMapping, setImageMapping] = useState<{
-    [key: string]: { base64: string; filename: string };
-  }>({});
-
-  // ユーザー情報状態
+  // 編集者候補（全ユーザー）
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  // シリーズ関連
+  const [seriesId, setSeriesId] = useState<string>(""); // 選択中のシリーズID（未選択時は空文字）
+  const [allSeries, setAllSeries] = useState<{ id: string; title: string }[]>([]);
+  const [newSeriesTitle, setNewSeriesTitle] = useState<string>("");
+  const [seriesOrder, setSeriesOrder] = useState<number>(1);
 
   const navigate = useNavigate();
   const auth = getAuth();
 
-  // ----------------------------
   // FirebaseAuth のログイン状態監視
-  // ----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
@@ -82,9 +77,7 @@ const AddArticle: React.FC = () => {
     return () => unsubscribe();
   }, [auth]);
 
-  // ----------------------------
   // Firestore の users コレクション取得
-  // ----------------------------
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -103,9 +96,7 @@ const AddArticle: React.FC = () => {
     fetchUsers();
   }, []);
 
-  // ----------------------------
   // Firestore の tags コレクション取得
-  // ----------------------------
   useEffect(() => {
     const fetchTags = async () => {
       try {
@@ -120,9 +111,20 @@ const AddArticle: React.FC = () => {
     fetchTags();
   }, []);
 
-  // ----------------------------
-  // 編集者の追加・削除処理
-  // ----------------------------
+  // Firestore の series コレクション取得（リアルタイム更新）
+  useEffect(() => {
+    const seriesCol = collection(db, "series");
+    const unsubscribe = onSnapshot(seriesCol, (snapshot) => {
+      const seriesList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        title: doc.data().title,
+      }));
+      setAllSeries(seriesList);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 編集者追加／削除処理
   const handleAddEditor = (user: UserData) => {
     if (!selectedEditors.some((editor) => editor.uid === user.uid)) {
       setSelectedEditors([...selectedEditors, user]);
@@ -134,9 +136,7 @@ const AddArticle: React.FC = () => {
     setSelectedEditors(selectedEditors.filter((editor) => editor.uid !== uid));
   };
 
-  // ----------------------------
-  // タグの追加・削除処理
-  // ----------------------------
+  // タグ追加／削除処理
   const handleAddTag = (tag: string) => {
     const trimmedTag = tag.trim();
     if (trimmedTag === "") return;
@@ -150,11 +150,43 @@ const AddArticle: React.FC = () => {
     setSelectedTags(selectedTags.filter((t) => t !== tag));
   };
 
-  /**
-   * Markdown本文中の画像プレースホルダーをGitHub上の画像URLに置換する処理
-   * @param markdown 入力されたMarkdown本文
-   * @returns 置換後のMarkdown本文
-   */
+  // 画像アップロード処理
+  const handleUploadImage = () => {
+    if (!selectedImageFile) {
+      alert("画像ファイルを選択してください。");
+      return;
+    }
+    if (isUploading) return;
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (!result || typeof result !== "string" || result.trim() === "") {
+        alert("画像の読み込みに失敗しました。ファイルが無効です。");
+        setIsUploading(false);
+        return;
+      }
+      const base64Data = result.trim();
+      const id = nanoid(6);
+      const placeholder = `/images/${id}`;
+      const imageMarkdown = `\n![画像: ${selectedImageFile.name}](${placeholder})\n`;
+      setMarkdownContent((prev) => prev + imageMarkdown);
+      setImageMapping((prev) => ({
+        ...prev,
+        [id]: { base64: base64Data, filename: selectedImageFile.name },
+      }));
+      setShowImageModal(false);
+      setSelectedImageFile(null);
+      setIsUploading(false);
+    };
+    reader.onerror = () => {
+      alert("画像の読み込みに失敗しました。");
+      setIsUploading(false);
+    };
+    reader.readAsDataURL(selectedImageFile);
+  };
+
+  // Markdown内の画像プレースホルダーをGitHub上の画像URLに置換
   const processMarkdownContent = async (markdown: string): Promise<string> => {
     const placeholderRegex = /!\[([^\]]*)\]\((\/images\/([a-zA-Z0-9_-]+))\)/g;
     const uploadPromises: Promise<void>[] = [];
@@ -181,22 +213,15 @@ const AddArticle: React.FC = () => {
         uploadPromises.push(p);
       }
     }
-
     await Promise.all(uploadPromises);
-    const replaced = markdown.replace(
-      placeholderRegex,
-      (m, altText, placeholder, id) => {
-        const url = placeholderToURL[placeholder];
-        return url ? `![${altText}](${url})` : m;
-      }
-    );
+    const replaced = markdown.replace(placeholderRegex, (m, altText, placeholder) => {
+      const url = placeholderToURL[placeholder];
+      return url ? `![${altText}](${url})` : m;
+    });
     return replaced;
   };
 
-  /**
-   * FirestoreからGitHubトークンを取得する処理
-   * @returns GitHubトークン文字列
-   */
+  // FirestoreからGitHubトークン取得
   async function fetchGithubToken(): Promise<string> {
     try {
       const docRef = doc(db, "keys", "AjZSjYVj4CZSk1O7s8zG");
@@ -215,19 +240,10 @@ const AddArticle: React.FC = () => {
     }
   }
 
-  /**
-   * GitHubにBase64画像をアップロードする処理
-   * @param base64Data Base64形式の画像データ
-   * @param originalHead 元のデータヘッダー文字列
-   * @returns アップロード後の画像URL
-   */
-  const uploadBase64ImageToGitHub = async (
-    base64Data: string,
-    originalHead: string
-  ): Promise<string> => {
+  // GitHubに画像アップロード
+  const uploadBase64ImageToGitHub = async (base64Data: string, originalHead: string): Promise<string> => {
     const token = await fetchGithubToken();
     const GITHUB_API_URL = `https://api.github.com/repos/ASK-STEM-official/Image-Storage/contents/static/images/`;
-
     const imageTypeMatch = originalHead.match(/data:image\/([a-zA-Z]+);base64,/);
     let imageType = "png";
     if (imageTypeMatch && imageTypeMatch[1]) {
@@ -236,14 +252,12 @@ const AddArticle: React.FC = () => {
     const uniqueId = nanoid(10);
     const fileName = `${uniqueId}.${imageType}`;
     const apiUrl = `${GITHUB_API_URL}${fileName}`;
-
     const pureBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
 
     const payload = {
       message: `Add image: ${fileName}`,
       content: pureBase64,
     };
-
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
@@ -252,30 +266,44 @@ const AddArticle: React.FC = () => {
       },
       body: JSON.stringify(payload),
     });
-
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.message);
     }
-
     const uploadedUrl = `https://github.com/ASK-STEM-official/Image-Storage/raw/main/static/images/${fileName}`;
     return uploadedUrl;
   };
 
-  /**
-   * フォーム送信時の処理（記事投稿）
-   */
+  // 新規シリーズ作成
+  const createNewSeries = async () => {
+    if (!newSeriesTitle.trim()) return;
+    const newSeriesId = nanoid(10);
+    await setDoc(doc(db, "series", newSeriesId), {
+      title: newSeriesTitle,
+      created_at: serverTimestamp(),
+      articles: [],
+    });
+    // onSnapshot でリアルタイム更新されるため、ローカル状態の更新は不要
+    setSeriesId(newSeriesId);
+    setNewSeriesTitle("");
+    alert("新しいシリーズを作成しました！");
+  };
+
+  // フォーム送信処理（記事投稿）
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
-      // Markdown本文中の画像プレースホルダーをアップロード後のURLに置換
-      let content = markdownContent;
-      content = await processMarkdownContent(content);
+      // Markdown内の画像プレースホルダーをGitHub上の画像URLに置換
+      let content = await processMarkdownContent(markdownContent);
 
+      // 新規記事ID生成
       const articleId = nanoid(10);
       const docRef = doc(db, "articles", articleId);
 
-      await setDoc(docRef, {
+      // 記事データ作成（シリーズ情報は含まず、後からシリーズ更新）
+      const articleData = {
         title,
         content,
         tags: selectedTags,
@@ -284,9 +312,24 @@ const AddArticle: React.FC = () => {
         authorAvatarUrl: userAvatar,
         editors: selectedEditors.map((ed) => ed.uid),
         discord: discordFlag,
-      });
+      };
 
-      // Firestoreに存在しない新規タグがあれば登録
+      // 記事をarticlesコレクションに保存
+      await setDoc(docRef, articleData);
+
+      // シリーズが選択されている場合は、シリーズドキュメントのarticles配列に記事情報を追加
+      if (seriesId) {
+        const seriesRef = doc(db, "series", seriesId);
+        await updateDoc(seriesRef, {
+          articles: arrayUnion({
+            articleId,
+            order: seriesOrder,
+            title,
+          }),
+        });
+      }
+
+      // 新規タグ登録（Firestoreに存在しないタグを追加）
       for (const tag of selectedTags) {
         if (!allTags.includes(tag)) {
           try {
@@ -297,7 +340,7 @@ const AddArticle: React.FC = () => {
         }
       }
 
-      // ユーザーの経験値とレベル更新処理
+      // ユーザーXP更新処理
       if (userId) {
         const userDocRef = doc(db, "users", userId);
         const userDocSnap = await getDoc(userDocRef);
@@ -318,10 +361,14 @@ const AddArticle: React.FC = () => {
       setMarkdownContent("");
       setSelectedEditors([]);
       setSelectedTags([]);
+      setSeriesId("");
+      setSeriesOrder(1);
       navigate("/");
     } catch (err) {
       console.error("エラー:", err);
       alert("記事の投稿に失敗しました。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -331,9 +378,7 @@ const AddArticle: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* タイトル入力 */}
         <div className="form-group">
-          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">
-            タイトル
-          </label>
+          <label htmlFor="title" className="block text-gray-700 dark:text-gray-300">タイトル</label>
           <input
             type="text"
             id="title"
@@ -345,7 +390,57 @@ const AddArticle: React.FC = () => {
           />
         </div>
 
-        {/* タグ入力（既存タグから選択 or 新規作成） */}
+        {/* シリーズ選択 */}
+        <div className="form-group">
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">シリーズを選択</label>
+          <select
+            value={seriesId}
+            onChange={(e) => setSeriesId(e.target.value)}
+            className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
+          >
+            <option value="">シリーズなし</option>
+            {allSeries.map((series) => (
+              <option key={series.id} value={series.id}>
+                {series.title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 新規シリーズ作成 */}
+        <div className="form-group">
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">新しいシリーズを作成</label>
+          <input
+            type="text"
+            value={newSeriesTitle}
+            onChange={(e) => setNewSeriesTitle(e.target.value)}
+            placeholder="シリーズ名を入力"
+            className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
+          />
+          <button
+            type="button"
+            onClick={createNewSeries}
+            className="mt-2 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            新規シリーズ作成
+          </button>
+        </div>
+
+        {/* シリーズ内の順序指定（シリーズ選択時のみ表示） */}
+        {seriesId && (
+          <div className="form-group">
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">シリーズ内の順序</label>
+            <input
+              type="number"
+              min="1"
+              value={seriesOrder}
+              onChange={(e) => setSeriesOrder(parseInt(e.target.value, 10))}
+              className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+        )}
+
+        {/* タグ入力 */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">タグを追加</label>
           <input
@@ -367,11 +462,7 @@ const AddArticle: React.FC = () => {
           {tagSearch && (
             <ul className="border border-gray-300 dark:border-gray-600 mt-2 max-h-40 overflow-y-auto">
               {allTags
-                .filter(
-                  (t) =>
-                    t.toLowerCase().includes(tagSearch.toLowerCase()) &&
-                    !selectedTags.includes(t)
-                )
+                .filter((t) => t.toLowerCase().includes(tagSearch.toLowerCase()) && !selectedTags.includes(t))
                 .map((tag) => (
                   <li
                     key={tag}
@@ -393,16 +484,13 @@ const AddArticle: React.FC = () => {
           )}
         </div>
 
-        {/* 選択されたタグの表示 */}
+        {/* 選択されたタグ表示 */}
         {selectedTags.length > 0 && (
           <div className="form-group">
             <label className="block text-gray-700 dark:text-gray-300 mb-2">選択されたタグ</label>
             <ul className="space-y-2">
               {selectedTags.map((tag) => (
-                <li
-                  key={tag}
-                  className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
-                >
+                <li key={tag} className="flex items-center justify-between px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600">
                   <span className="text-gray-800 dark:text-gray-100">{tag}</span>
                   <button
                     type="button"
@@ -464,9 +552,7 @@ const AddArticle: React.FC = () => {
                         alt={user.displayName}
                         className="w-6 h-6 rounded-full mr-2"
                       />
-                      <span className="text-gray-800 dark:text-gray-100">
-                        {user.displayName}
-                      </span>
+                      <span className="text-gray-800 dark:text-gray-100">{user.displayName}</span>
                     </div>
                   </li>
                 ))}
@@ -487,7 +573,7 @@ const AddArticle: React.FC = () => {
           )}
         </div>
 
-        {/* 選択された編集者の表示 */}
+        {/* 選択された編集者表示 */}
         {selectedEditors.length > 0 && (
           <div className="form-group">
             <label className="block text-gray-700 dark:text-gray-300 mb-2">現在の編集者</label>
@@ -503,9 +589,7 @@ const AddArticle: React.FC = () => {
                       alt={editor.displayName}
                       className="w-6 h-6 rounded-full mr-2"
                     />
-                    <span className="text-gray-800 dark:text-gray-100">
-                      {editor.displayName}
-                    </span>
+                    <span className="text-gray-800 dark:text-gray-100">{editor.displayName}</span>
                   </div>
                   <button
                     type="button"
@@ -520,7 +604,7 @@ const AddArticle: React.FC = () => {
           </div>
         )}
 
-        {/* Markdownエディタ部分（共通Editorコンポーネントを使用） */}
+        {/* Markdownエディタ（共通Editorコンポーネントを使用） */}
         <Editor
           markdownContent={markdownContent}
           setMarkdownContent={setMarkdownContent}
@@ -530,12 +614,51 @@ const AddArticle: React.FC = () => {
 
         <button
           type="submit"
-          disabled={false}
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          disabled={isSubmitting}
+          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
         >
           投稿
         </button>
       </form>
+
+      {/* 画像アップロードモーダル */}
+      {showImageModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-80">
+            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">画像をアップロード</h2>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  setSelectedImageFile(e.target.files[0]);
+                }
+              }}
+              className="mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImageModal(false);
+                  setSelectedImageFile(null);
+                }}
+                className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleUploadImage}
+                disabled={isUploading}
+                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                アップロード
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
