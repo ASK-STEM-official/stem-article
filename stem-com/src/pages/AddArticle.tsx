@@ -1,4 +1,4 @@
-import React, { useState, useEffect, FormEvent} from "react";
+import React, { useState, useEffect, FormEvent } from "react";
 import {
   doc,
   setDoc,
@@ -6,6 +6,7 @@ import {
   updateDoc,
   collection,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   arrayUnion,
 } from "firebase/firestore";
@@ -110,22 +111,17 @@ const AddArticle: React.FC = () => {
     fetchTags();
   }, []);
 
-  // Firestore の series コレクション取得
+  // Firestore の series コレクション取得（リアルタイム更新）
   useEffect(() => {
-    const fetchSeries = async () => {
-      try {
-        const seriesCol = collection(db, "series");
-        const seriesSnapshot = await getDocs(seriesCol);
-        const seriesList = seriesSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          title: doc.data().title,
-        }));
-        setAllSeries(seriesList);
-      } catch (error) {
-        console.error("シリーズの取得に失敗:", error);
-      }
-    };
-    fetchSeries();
+    const seriesCol = collection(db, "series");
+    const unsubscribe = onSnapshot(seriesCol, (snapshot) => {
+      const seriesList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        title: doc.data().title,
+      }));
+      setAllSeries(seriesList);
+    });
+    return () => unsubscribe();
   }, []);
 
   // 編集者追加／削除処理
@@ -153,6 +149,7 @@ const AddArticle: React.FC = () => {
   const handleRemoveTag = (tag: string) => {
     setSelectedTags(selectedTags.filter((t) => t !== tag));
   };
+
   // 画像アップロード処理
   const handleUploadImage = () => {
     if (!selectedImageFile) {
@@ -286,6 +283,7 @@ const AddArticle: React.FC = () => {
       created_at: serverTimestamp(),
       articles: [],
     });
+    // onSnapshot でリアルタイム更新されるため、ローカル状態の更新は不要
     setSeriesId(newSeriesId);
     setNewSeriesTitle("");
     alert("新しいシリーズを作成しました！");
@@ -366,7 +364,6 @@ const AddArticle: React.FC = () => {
       setSeriesId("");
       setSeriesOrder(1);
       navigate("/");
-
     } catch (err) {
       console.error("エラー:", err);
       alert("記事の投稿に失敗しました。");
