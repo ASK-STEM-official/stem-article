@@ -227,7 +227,7 @@ const App = () => {
       document.documentElement.classList.remove("dark");
     }
   };
-
+  
   // 認証状態の初期化中はローディング表示を行う
   if (initializing) {
     return (
@@ -278,16 +278,9 @@ const App = () => {
    */
   return (
     <Router>
-      <div className="min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        {/* ナビゲーションバー: ログアウトボタン、テーマ切り替えなど */}
-        <Navbar
-          user={user}
-          onLogout={handleLogout}
-          toggleDarkMode={toggleDarkMode}
-          darkMode={darkMode}
-        />
-
-        {/* ルーティング設定 */}
+      {/* 固定ナビバー分の高さを確保するため、全体コンテンツにpt-16を追加 */}
+      <div className="pt-16 min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        <Navbar user={user} onLogout={handleLogout} />
         <Routes>
           {/* 新規投稿ページ */}
           <Route path="/add-article" element={<AddArticle />} />
