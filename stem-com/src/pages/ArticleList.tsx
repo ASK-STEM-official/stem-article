@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { collection, getDocs, orderBy, query, where, documentId, CollectionReference } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+  documentId,
+  CollectionReference,
+} from "firebase/firestore";
 import { db } from "../lib/firebase/db.ts";
 import { Calendar, User, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
@@ -14,11 +22,9 @@ interface Series {
   title: string;
   created_at?: { seconds: number; nanoseconds: number };
   articles?: any[];
-  // 他に必要なプロパティがあれば追加してください
 }
 
 const ArticleList: React.FC = () => {
-  // 記事関連の状態
   const [articles, setArticles] = useState<Article[]>([]);
   const [users, setUsers] = useState<{ [key: string]: { displayName: string; avatarUrl?: string } }>({});
   const [loading, setLoading] = useState<boolean>(true);
@@ -40,19 +46,16 @@ const ArticleList: React.FC = () => {
           ...(doc.data() as Omit<Article, "id">),
         }));
         setArticles(articlesList);
-        console.log("Fetched Articles:", articlesList);
 
         const authorIds = Array.from(new Set(articlesList.map((article) => article.authorId)));
         const editorIds = Array.from(new Set(articlesList.flatMap((article) => article.editors || [])));
         const allUserIds = Array.from(new Set([...authorIds, ...editorIds]));
-        console.log("Unique User IDs:", allUserIds);
 
         const chunkSize = 10;
         const userChunks: string[][] = [];
         for (let i = 0; i < allUserIds.length; i += chunkSize) {
           userChunks.push(allUserIds.slice(i, i + chunkSize));
         }
-        console.log("User Chunks:", userChunks);
 
         const usersMap: { [key: string]: { displayName: string; avatarUrl?: string } } = {};
         for (const chunk of userChunks) {
@@ -61,7 +64,6 @@ const ArticleList: React.FC = () => {
             where(documentId(), "in", chunk)
           );
           const usersSnapshot = await getDocs(usersQuery);
-          console.log(`Fetched Users for Chunk ${chunk}:`, usersSnapshot.docs.map((doc) => doc.id));
           usersSnapshot.docs.forEach((userDoc) => {
             const data = userDoc.data();
             usersMap[userDoc.id] = {
@@ -70,8 +72,6 @@ const ArticleList: React.FC = () => {
             };
           });
         }
-        console.log("Users Map:", usersMap);
-
         allUserIds.forEach((uid) => {
           if (!usersMap[uid]) {
             usersMap[uid] = {
@@ -91,11 +91,10 @@ const ArticleList: React.FC = () => {
     fetchArticlesAndUsers();
   }, []);
 
-  // 追加：Firestore からシリーズを取得
+  // Firestore からシリーズを取得
   useEffect(() => {
     const fetchSeries = async () => {
       try {
-        // ジェネリクスを使って Series 型を指定
         const seriesCol = collection(db, "series") as CollectionReference<Series>;
         const seriesSnapshot = await getDocs(seriesCol);
         const seriesList: Series[] = seriesSnapshot.docs.map((doc) => ({
@@ -142,14 +141,14 @@ const ArticleList: React.FC = () => {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
+      <div className="container mx-auto p-8 text-center">
         <p className="text-red-500">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-gray-700 dark:text-gray-200">
+    <div className="container mx-auto p-8 text-gray-700 dark:text-gray-200">
       {/* 記事検索 */}
       <div className="mb-6">
         <input
@@ -161,7 +160,7 @@ const ArticleList: React.FC = () => {
         />
       </div>
 
-      {/* 追加：シリーズ検索・一覧表示 */}
+      {/* シリーズ検索・一覧表示 */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">シリーズ</h2>
         <input

@@ -29,7 +29,7 @@ import { Github } from "lucide-react";
 import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
 import Rank from "./pages/rank.tsx";
-import SeriesArticles from "./pages/SeriesList.tsx"; 
+import SeriesArticles from "./pages/SeriesList.tsx";
 
 interface UserData {
   avatarUrl: string;
@@ -43,22 +43,10 @@ const App = () => {
   const [user, setUser] = useState<UserData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // ダークモード管理用の state
-  const [darkMode, setDarkMode] = useState<boolean>(false);
-
   // 認証状態の初期化中フラグ（firebase の自動ログイン確認中に利用）
   const [initializing, setInitializing] = useState<boolean>(true);
 
-  // 初回マウント時に OS のダークモード設定を反映させる
-  useEffect(() => {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setDarkMode(prefersDark);
-    if (prefersDark) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
+  // OS のダークモード設定は Navbar 側で管理するため、ここでは不要
 
   /**
    * firebase の認証キャッシュを利用した自動ログイン処理
@@ -216,18 +204,6 @@ const App = () => {
     }
   };
 
-  /**
-   * ダークモードの切り替え関数。
-   */
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    if (!darkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  };
-
   // 認証状態の初期化中はローディング表示を行う
   if (initializing) {
     return (
@@ -273,35 +249,24 @@ const App = () => {
   }
 
   /**
-   * ログイン後は、メインのルーティングを表示する。
-   * ユーザーが認証されていれば通常の機能（記事の閲覧・投稿・編集など）を利用可能。
+   * ログイン後は Navbar コンポーネント内にルーティングを配置し、
+   * Navbar がレイアウトやダークモード、サイドバーなどの管理を行います。
    */
   return (
     <Router>
-      {/* 固定ナビバー分の高さを確保するため、全体コンテンツにpt-16を追加 */}
-      <div className="pt-16 min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        <Navbar user={user} onLogout={handleLogout} />
+      <Navbar user={user} onLogout={handleLogout}>
         <Routes>
-          {/* 新規投稿ページ */}
           <Route path="/add-article" element={<AddArticle />} />
-          {/* 記事詳細ページ */}
           <Route path="/articles/:id" element={<ArticleDetail />} />
-          {/* 記事編集ページ */}
           <Route path="/articles/:id/edit" element={<EditArticle />} />
-          {/* ユーザープロフィールページ */}
           <Route path="/users/:id" element={<UserProfile />} />
-          {/* プロフィール設定ページ */}
           <Route path="/profileset" element={<Profileset user={user} />} />
-          {/* ランキングページ */}
           <Route path="/rank" element={<Rank />} />
-          {/* シリーズ詳細ページ：クリックされたシリーズのIDをもとにシリーズ内の記事一覧を表示 */}
           <Route path="/series/:id" element={<SeriesArticles />} />
-          {/* トップページ -> 記事一覧 */}
           <Route path="/" element={<ArticleList />} />
-          {/* 存在しないページはトップにリダイレクト（404用） */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </div>
+      </Navbar>
     </Router>
   );
 };
