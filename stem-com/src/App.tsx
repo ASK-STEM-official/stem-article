@@ -35,6 +35,7 @@ import UserProfile from "./pages/UserProfile.tsx";
 import EditArticle from "./pages/EditArticle.tsx";
 import Rank from "./pages/rank.tsx";
 import SeriesArticles from "./pages/SeriesList.tsx";
+import FloatingButton from "./pages/FloatingButton.tsx";
 
 interface UserData {
   avatarUrl: string;
@@ -245,6 +246,7 @@ const App = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Navbar>
+        <FloatingButton />
       </Router>
     </div>
   );
