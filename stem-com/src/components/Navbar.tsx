@@ -1,11 +1,9 @@
-// components/Navbar.tsx（Alternative: React.FCを使用せずに記述する例）
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Menu,
   X,
   BookOpen,
-  LogOut,
   Sun,
   Moon,
   User as UserIcon,
@@ -34,10 +32,10 @@ interface NavbarProps {
  * サイドバーの開閉やダークモードの切り替え、ユーザー情報の表示などを行います。
  */
 const Navbar = ({ user, onLogout, children }: NavbarProps) => {
-  // ① サイドバーの開閉状態を管理。true で「開いた状態」にしておく
+  // サイドバーの開閉状態を管理。true で「開いた状態」にしておく
   const [menuOpen, setMenuOpen] = useState<boolean>(true);
 
-  // ② ダークモードの状態を管理
+  // ダークモードの状態を管理
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
   // コンポーネントマウント時にテーマを初期化
@@ -139,14 +137,7 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
               ) : (
                 <UserIcon className="h-8 w-8 text-gray-400" />
               )}
-              {/* PC版ログアウトボタン（md以上で表示） */}
-              <button
-                onClick={onLogout}
-                className="hidden md:flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
-              >
-                <LogOut className="h-5 w-5" />
-                <span>ログアウト</span>
-              </button>
+              {/* PC版のログアウトボタンは削除 */}
             </div>
           </div>
         </div>
@@ -175,10 +166,10 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
               <TrendingUp className="h-5 w-5 inline mr-2" />
               ランキング
             </Link>
-            {/* モバイル版ログアウトボタン（md未満で表示） */}
+            {/* ハンバーガーメニュー内にログアウトボタンを配置（PC・スマホ共通） */}
             <button
               onClick={onLogout}
-              className="mt-4 block w-full py-2 px-4 bg-red-600 text-white rounded hover:bg-red-700 transition-colors md:hidden"
+              className="mt-4 block w-full py-2 px-4 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
             >
               ログアウト
             </button>
@@ -186,11 +177,7 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
         </div>
 
         {/* メインコンテンツ。サイドバーが開いているときは左に64pxのマージンを取る */}
-        <main
-          className={`flex-1 transition-all duration-300 ${
-            menuOpen ? "ml-64" : "ml-0"
-          }`}
-        >
+        <main className={`flex-1 transition-all duration-300 ${menuOpen ? "ml-64" : "ml-0"}`}>
           {children}
         </main>
       </div>
