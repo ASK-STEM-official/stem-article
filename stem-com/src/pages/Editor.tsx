@@ -4,6 +4,7 @@
 // さらに、画像アップロード機能を内包しており、画像アップロード時はBase64形式の画像を読み込み、
 // 本文中に「/images/xxxxx」というプレースホルダー付き画像記法を挿入します。
 // Admonitions 機能（:::info, :::dangerなど）にも対応。
+// Admonitions のアイコン・見た目を ArticleDetail.tsx と統一。
 
 import React, { useState, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
@@ -13,55 +14,79 @@ import { visit } from "unist-util-visit";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
-// Admonitions 用のコンポーネント
-const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({ type, children }) => {
+// アイコン
+import {
+  Info,
+  FileText,
+  Lightbulb,
+  AlertTriangle,
+  Flame,
+} from "lucide-react";
+
+// Admonition コンポーネント（ArticleDetail.tsx と同じ実装）
+const Admonition: React.FC<{ type: string; children: React.ReactNode }> = ({
+  type,
+  children,
+}) => {
   let containerClasses = "";
   let headerColorClass = "";
+  let IconComponent = <Info className="w-5 h-5" />; // デフォルトは Info アイコン
 
   switch (type) {
     case "info":
       containerClasses =
         "bg-blue-100 dark:bg-blue-900 border-blue-500 dark:border-blue-400 text-blue-800 dark:text-blue-200";
       headerColorClass = "text-blue-800 dark:text-blue-200";
+      IconComponent = <Info className="w-5 h-5" />;
       break;
     case "note":
       containerClasses =
         "bg-purple-100 dark:bg-purple-900 border-purple-500 dark:border-purple-400 text-purple-800 dark:text-purple-200";
       headerColorClass = "text-purple-800 dark:text-purple-200";
+      IconComponent = <FileText className="w-5 h-5" />;
       break;
     case "tip":
       containerClasses =
         "bg-green-100 dark:bg-green-900 border-green-500 dark:border-green-400 text-green-800 dark:text-green-200";
       headerColorClass = "text-green-800 dark:text-green-200";
+      IconComponent = <Lightbulb className="w-5 h-5" />;
       break;
     case "caution":
       containerClasses =
         "bg-yellow-100 dark:bg-yellow-900 border-yellow-500 dark:border-yellow-400 text-yellow-800 dark:text-yellow-200";
       headerColorClass = "text-yellow-800 dark:text-yellow-200";
+      IconComponent = <AlertTriangle className="w-5 h-5" />;
       break;
     case "danger":
       containerClasses =
         "bg-red-100 dark:bg-red-900 border-red-500 dark:border-red-400 text-red-800 dark:text-red-200";
       headerColorClass = "text-red-800 dark:text-red-200";
+      IconComponent = <Flame className="w-5 h-5" />;
       break;
     default:
       containerClasses =
         "bg-gray-100 dark:bg-gray-900 border-gray-500 dark:border-gray-400 text-gray-800 dark:text-gray-200";
       headerColorClass = "text-gray-800 dark:text-gray-200";
+      IconComponent = <Info className="w-5 h-5" />;
       break;
   }
 
   return (
-    <div className={`p-4 border-l-4 rounded-md mb-4 ${containerClasses}`}>
-      <strong className={`block mb-2 font-bold ${headerColorClass}`}>
-        {type.toUpperCase()}
-      </strong>
-      <div>{children}</div>
+    <div
+      className={`p-4 border-l-4 rounded-md mb-4 flex items-start space-x-2 ${containerClasses}`}
+    >
+      <div className={`mt-1 ${headerColorClass}`}>{IconComponent}</div>
+      <div>
+        <strong className={`block mb-2 font-bold ${headerColorClass}`}>
+          {type.toUpperCase()}
+        </strong>
+        <div>{children}</div>
+      </div>
     </div>
   );
 };
 
-// Admonitions を認識するための remarkプラグイン
+// Admonitions を認識するための remarkプラグイン（同じ実装）
 const remarkAdmonitionsPlugin = () => {
   return (tree: any) => {
     visit(tree, (node) => {
@@ -122,10 +147,9 @@ const Editor: React.FC<EditorProps> = ({
    * 左（textarea）をスクロールしたとき、右（preview）も同期
    */
   const handleScrollLeft = useCallback(() => {
-    // すでに同期中ならスキップ
     if (isSyncingRef.current) return;
-
     if (!textareaRef.current || !previewRef.current) return;
+
     const left = textareaRef.current;
     const right = previewRef.current;
 
@@ -134,7 +158,6 @@ const Editor: React.FC<EditorProps> = ({
     const ratio = left.scrollTop / (left.scrollHeight - left.clientHeight || 1);
     right.scrollTop = ratio * (right.scrollHeight - right.clientHeight);
 
-    // 同期処理が終わったらフラグを戻す
     setTimeout(() => {
       isSyncingRef.current = false;
     }, 0);
@@ -145,8 +168,8 @@ const Editor: React.FC<EditorProps> = ({
    */
   const handleScrollRight = useCallback(() => {
     if (isSyncingRef.current) return;
-
     if (!textareaRef.current || !previewRef.current) return;
+
     const left = textareaRef.current;
     const right = previewRef.current;
 
@@ -161,7 +184,6 @@ const Editor: React.FC<EditorProps> = ({
 
   /**
    * カーソル位置に指定のテキストを挿入する関数
-   * @param text 挿入するテキスト
    */
   const insertAtCursor = (text: string) => {
     if (!textareaRef.current) return;
@@ -190,6 +212,7 @@ const Editor: React.FC<EditorProps> = ({
     }
     if (isUploading) return;
     setIsUploading(true);
+
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
@@ -411,7 +434,7 @@ const Editor: React.FC<EditorProps> = ({
                     );
                   }
                 },
-                // Admonitions 用の div -> <Admonition>
+                // Admonitions 用の div -> <Admonition> (ArticleDetail と同じ)
                 div({ className, children, ...props }) {
                   if (className && className.startsWith("admonition")) {
                     const type = className.replace("admonition admonition-", "");
