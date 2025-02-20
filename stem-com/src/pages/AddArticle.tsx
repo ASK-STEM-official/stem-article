@@ -392,8 +392,9 @@ const AddArticle: React.FC = () => {
 
         {/* シリーズ選択 */}
         <div className="form-group">
-          <label className="block text-gray-700 dark:text-gray-300 mb-2">シリーズを選択</label>
+          <label htmlFor="series" className="block text-gray-700 dark:text-gray-300 mb-2">シリーズを選択</label>
           <select
+            id="series"
             value={seriesId}
             onChange={(e) => setSeriesId(e.target.value)}
             className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
@@ -435,6 +436,8 @@ const AddArticle: React.FC = () => {
               min="1"
               value={seriesOrder}
               onChange={(e) => setSeriesOrder(parseInt(e.target.value, 10))}
+              title="シリーズ内の順序を入力してください"
+              placeholder="シリーズ内の順序を入力してください"
               className="w-full px-3 py-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
             />
           </div>
@@ -629,6 +632,8 @@ const AddArticle: React.FC = () => {
             <input
               type="file"
               accept="image/*"
+              title="画像ファイルを選択してください"
+              placeholder="画像ファイルを選択してください"
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
                   setSelectedImageFile(e.target.files[0]);
