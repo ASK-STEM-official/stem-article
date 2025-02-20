@@ -1,4 +1,4 @@
-// Navbar.tsx
+// components/Navbar.tsx（Alternative: React.FCを使用せずに記述する例）
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -29,7 +29,11 @@ interface NavbarProps {
   children: React.ReactNode;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
+/**
+ * Navbarコンポーネント
+ * サイドバーの開閉やダークモードの切り替え、ユーザー情報の表示などを行います。
+ */
+const Navbar = ({ user, onLogout, children }: NavbarProps) => {
   // ① サイドバーの開閉状態を管理。true で「開いた状態」にしておく
   const [menuOpen, setMenuOpen] = useState<boolean>(true);
 
@@ -181,7 +185,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
           </div>
         </div>
 
-        {/* メインコンテンツ。サイドバーが開いているときは左に64px(16rem)のマージンを取る */}
+        {/* メインコンテンツ。サイドバーが開いているときは左に64pxのマージンを取る */}
         <main
           className={`flex-1 transition-all duration-300 ${
             menuOpen ? "ml-64" : "ml-0"
