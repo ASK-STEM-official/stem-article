@@ -31,9 +31,7 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
-  // ダークモード状態（ローカルで管理）
   const [darkMode, setDarkMode] = useState<boolean>(false);
-  // サイドバー（メニュー）の開閉状態
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
   /**
@@ -62,7 +60,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
     };
     initializeTheme();
 
-    // 初期表示時にウィンドウサイズに応じてサイドバーを開閉
+    // 初期表示時にウィンドウサイズに応じてサイドバーの状態を設定
     if (window.innerWidth >= 768) {
       setMenuOpen(true);
     } else {
@@ -78,7 +76,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
       }
     };
     window.addEventListener("resize", handleResize);
-
     return () => window.removeEventListener("resize", handleResize);
   }, [user]);
 
@@ -98,7 +95,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
     }
   };
 
-  // ハンバーガーメニューの開閉
   const toggleMenu = () => setMenuOpen(!menuOpen);
 
   /**
@@ -128,18 +124,13 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
                 <span className="font-bold text-xl">STEM研究部記事投稿サイト</span>
               </Link>
             </div>
-
             {/* 右側: ダークモードボタン + ユーザー情報 */}
             <div className="flex items-center space-x-4">
-              {/* ダークモードのトグルボタン */}
               <button onClick={toggleDarkMode}>
                 {darkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
               </button>
-              
-              {/* ログイン中かどうかで分岐 */}
               {user ? (
                 <Link to={`/users/${user.uid}`} className="flex items-center space-x-2">
-                  {/* アバター画像 or イニシャルアイコン or デフォルトアイコン */}
                   {user.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
@@ -174,23 +165,20 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
           }`}
         >
           <div className="p-4">
-            {/* 新規投稿 */}
             <Link
               to="/add-article"
-              className="block py-2 px-4 text-white hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700"
+              className="block py-2 px-4 text-white hover:bg-indigo-700 transition-colors"
             >
               <PenLine className="h-5 w-5 inline mr-2" />
               新規投稿
             </Link>
-            {/* ランキング */}
             <Link
               to="/rank"
-              className="block py-2 px-4 text-white hover:bg-indigo-700 transition-colors dark:hover:bg-gray-700"
+              className="block py-2 px-4 text-white hover:bg-indigo-700 transition-colors"
             >
               <TrendingUp className="h-5 w-5 inline mr-2" />
               ランキング
             </Link>
-            {/* ログアウト */}
             <button
               onClick={onLogout}
               className="mt-4 flex items-center space-x-2 w-full py-2 px-4 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -200,8 +188,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
             </button>
           </div>
         </div>
-
-        {/* メインコンテンツ: children を表示 */}
+        {/* メインコンテンツ */}
         <main className={`flex-1 transition-all duration-300 ${menuOpen ? "ml-64" : "ml-0"}`}>
           {children}
         </main>

@@ -149,7 +149,7 @@ const UserProfile: React.FC = () => {
           </div>
           <div className="w-full bg-gray-300 dark:bg-gray-600 rounded-full h-3 mt-1">
             <div
-              className="bg-indigo-600 h-3 rounded-full"
+              className={`bg-indigo-600 h-3 rounded-full progress-bar`}
               style={{ width: `${progressPercent}%` }}
             ></div>
           </div>

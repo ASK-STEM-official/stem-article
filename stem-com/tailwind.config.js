@@ -1,21 +1,28 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class', // ダークモードをクラスベースで制御
+  // ダークモードをクラスベースで制御する設定
+  darkMode: 'class',
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}'
   ],
   theme: {
     extend: {
+      // カスタムカラーの定義
       colors: {
-        lightBackground: '#ffffff', // ライトモードの背景色
-        darkBackground: '#1a202c',  // ダークモードの背景色 (Tailwindのgray-900)
+        // ライトモード時の背景色
+        lightBackground: '#ffffff',
+        // ダークモード時の背景色
+        darkBackground: '#1a202c', // Tailwindのgray-900相当
       },
+      // typographyプラグインを利用して、本文テキストなどを調整
       typography: (theme) => ({
+        // デフォルト設定
         DEFAULT: {
           css: {
             maxWidth: 'none',
-            color: '#333', // ライトモードのデフォルトテキストカラー
+            // ライトモードのデフォルトテキストカラー
+            color: '#333',
             a: {
               color: '#3182ce',
               '&:hover': {
@@ -24,15 +31,18 @@ export default {
             },
           },
         },
+        // ダークモード時の設定
         dark: {
           css: {
-            color: '#ffffff', // ダークモードのデフォルトテキストカラー
+            // ダークモードのデフォルトテキストカラー
+            color: '#ffffff',
             a: {
               color: '#90cdf4',
               '&:hover': {
                 color: '#63b3ed',
               },
             },
+            // 見出しや引用、コードブロックなどの色もダークモード用に上書き
             h1: { color: '#ffffff' },
             h2: { color: '#ffffff' },
             h3: { color: '#ffffff' },
@@ -56,7 +66,9 @@ export default {
     },
   },
   plugins: [
+    // Tailwind公式プラグイン: typography
     require('@tailwindcss/typography'),
-    require('@tailwindcss/forms')
+    // Tailwind公式プラグイン: forms
+    require('@tailwindcss/forms'),
   ],
 };
