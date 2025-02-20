@@ -1,4 +1,6 @@
 // Navbar.tsx
+// ユーザー情報と各種アイコンを表示するナビバーコンポーネント。画面上部に固定表示されます。
+
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -14,22 +16,31 @@ import {
 } from "lucide-react";
 import { getUserTheme, setUserTheme } from "../lib/firebase/firestore.ts";
 
+// ユーザー情報の型
 interface UserData {
   uid: string;
   avatarUrl?: string;
   displayName?: string;
 }
 
+// Navbarコンポーネントが受け取るPropsの型
 interface NavbarProps {
   user: UserData | null;
   onLogout: () => void;
-  children: React.ReactNode;
+  children: React.ReactNode; // メインコンテンツを子要素として受け取る
 }
 
 const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
+  /**
+   * 初期化時:
+   *  1. ログインしていればFirestoreからユーザーのテーマを取得
+   *  2. 未ログインならlocalStorageからテーマを取得
+   *  3. 画面幅によってサイドバー初期表示を設定
+   *  4. リサイズ時のイベントを登録し、大画面なら自動的にサイドバーを開く
+   */
   useEffect(() => {
     const initializeTheme = async () => {
       if (user) {
@@ -68,6 +79,12 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, [user]);
 
+  /**
+   * ダークモード切り替え関数
+   *  1. darkModeを反転
+   *  2. documentElementに.darkクラスを付け外し
+   *  3. ログイン中ならFirestoreに保存、未ログインならlocalStorageに保存
+   */
   const toggleDarkMode = async () => {
     setDarkMode(!darkMode);
     document.documentElement.classList.toggle("dark", !darkMode);
@@ -80,7 +97,10 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
 
-  // ユーザー名からイニシャルを生成
+  /**
+   * ユーザー名からイニシャルを生成する関数
+   *  例: "John Doe" → "JD"
+   */
   const getInitials = (name: string | undefined) => {
     if (!name) return "";
     const names = name.split(" ");
@@ -90,12 +110,12 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* ナビバー */}
+      {/* ナビバー本体（上部固定） */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-indigo-600 text-white shadow-lg dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+            {/* 左側: ハンバーガーメニュー + タイトル */}
             <div className="flex items-center space-x-3">
-              {/* ハンバーガーメニュー用ボタン：PC・モバイル両対応 */}
               <button onClick={toggleMenu} className="focus:outline-none">
                 {menuOpen ? <X className="h-8 w-8" /> : <Menu className="h-8 w-8" />}
               </button>
@@ -104,6 +124,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
                 <span className="font-bold text-xl">STEM研究部記事投稿サイト</span>
               </Link>
             </div>
+            {/* 右側: ダークモードボタン + ユーザー情報 */}
             <div className="flex items-center space-x-4">
               <button onClick={toggleDarkMode}>
                 {darkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
