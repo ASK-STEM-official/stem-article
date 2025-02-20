@@ -1,92 +1,86 @@
+// Navbar.tsx
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Menu,
   X,
   BookOpen,
+  LogOut,
   Sun,
   Moon,
   User as UserIcon,
   PenLine,
   TrendingUp,
 } from "lucide-react";
-// Firestoreにユーザーのテーマを保存・取得するユーティリティ関数
 import { getUserTheme, setUserTheme } from "../lib/firebase/firestore.ts";
 
-// ユーザーデータ型
 interface UserData {
   uid: string;
   avatarUrl?: string;
   displayName?: string;
 }
 
-// Navbarコンポーネントに渡すpropsの型
 interface NavbarProps {
   user: UserData | null;
   onLogout: () => void;
   children: React.ReactNode;
 }
 
-/**
- * Navbarコンポーネント
- * サイドバーの開閉やダークモードの切り替え、ユーザー情報の表示などを行います。
- */
-const Navbar = ({ user, onLogout, children }: NavbarProps) => {
-  // サイドバーの開閉状態を管理。true で「開いた状態」にしておく
-  const [menuOpen, setMenuOpen] = useState<boolean>(true);
-
-  // ダークモードの状態を管理
+const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
   const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
-  // コンポーネントマウント時にテーマを初期化
   useEffect(() => {
     const initializeTheme = async () => {
       if (user) {
-        // ログイン中ユーザーの場合は Firestore からテーマを取得
         const userTheme = await getUserTheme(user.uid);
         if (userTheme === "dark") {
           setDarkMode(true);
           document.documentElement.classList.add("dark");
-          document.body.classList.add("dark");
         } else {
           setDarkMode(false);
           document.documentElement.classList.remove("dark");
-          document.body.classList.remove("dark");
         }
       } else {
-        // 未ログイン時は localStorage の設定を利用
         const storedTheme = localStorage.getItem("theme");
-        const isDark = storedTheme === "dark";
-        setDarkMode(isDark);
-        document.documentElement.classList.toggle("dark", isDark);
-        document.body.classList.toggle("dark", isDark);
+        setDarkMode(storedTheme === "dark");
+        document.documentElement.classList.toggle("dark", storedTheme === "dark");
       }
     };
     initializeTheme();
+
+    // 初期表示時にウィンドウサイズに応じてサイドバーの状態を設定
+    if (window.innerWidth >= 768) {
+      setMenuOpen(true);
+    } else {
+      setMenuOpen(false);
+    }
+
+    // リサイズ時にサイドバーの状態を自動で更新
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setMenuOpen(true);
+      } else {
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, [user]);
 
-  // ダークモードとライトモードの切り替え
   const toggleDarkMode = async () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    document.documentElement.classList.toggle("dark", newDarkMode);
-    document.body.classList.toggle("dark", newDarkMode);
-
+    setDarkMode(!darkMode);
+    document.documentElement.classList.toggle("dark", !darkMode);
     if (user) {
-      // ログイン中なら Firestore に保存
-      await setUserTheme(user.uid, newDarkMode ? "dark" : "light");
+      await setUserTheme(user.uid, darkMode ? "light" : "dark");
     } else {
-      // 未ログインなら localStorage に保存
-      localStorage.setItem("theme", newDarkMode ? "dark" : "light");
+      localStorage.setItem("theme", darkMode ? "light" : "dark");
     }
   };
 
-  // ハンバーガーメニューの開閉を切り替える
-  const toggleMenu = () => {
-    setMenuOpen(!menuOpen);
-  };
+  const toggleMenu = () => setMenuOpen(!menuOpen);
 
-  // ユーザー名からイニシャルを生成する関数
+  // ユーザー名からイニシャルを生成
   const getInitials = (name: string | undefined) => {
     if (!name) return "";
     const names = name.split(" ");
@@ -96,12 +90,12 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* 上部ナビゲーションバー */}
+      {/* ナビバー */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-indigo-600 text-white shadow-lg dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
-              {/* PC版でも常にハンバーガーメニューアイコンを表示 */}
+              {/* ハンバーガーメニュー用ボタン：PC・モバイル両対応 */}
               <button onClick={toggleMenu} className="focus:outline-none">
                 {menuOpen ? <X className="h-8 w-8" /> : <Menu className="h-8 w-8" />}
               </button>
@@ -111,13 +105,11 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
-              {/* ダークモード切り替えボタン */}
               <button onClick={toggleDarkMode}>
                 {darkMode ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
               </button>
               {user ? (
                 <Link to={`/users/${user.uid}`} className="flex items-center space-x-2">
-                  {/* アバター画像 or イニシャル or アイコン */}
                   {user.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
@@ -131,21 +123,21 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
                   ) : (
                     <UserIcon className="h-8 w-8 text-gray-400" />
                   )}
-                  {/* 表示名 */}
-                  {user.displayName && <span className="font-medium">{user.displayName}</span>}
+                  {user.displayName && (
+                    <span className="font-medium">{user.displayName}</span>
+                  )}
                 </Link>
               ) : (
                 <UserIcon className="h-8 w-8 text-gray-400" />
               )}
-              {/* PC版のログアウトボタンは削除 */}
             </div>
           </div>
         </div>
       </nav>
 
-      {/* サイドバー + メインコンテンツ レイアウト */}
+      {/* レイアウト全体 */}
       <div className="flex flex-1 pt-16 transition-all duration-300">
-        {/* サイドバー。menuOpen が false の時は左に隠す */}
+        {/* サイドバー */}
         <div
           className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-indigo-700 dark:bg-gray-900 transition-transform duration-300 ease-in-out ${
             menuOpen ? "translate-x-0" : "-translate-x-full"
@@ -166,17 +158,16 @@ const Navbar = ({ user, onLogout, children }: NavbarProps) => {
               <TrendingUp className="h-5 w-5 inline mr-2" />
               ランキング
             </Link>
-            {/* ハンバーガーメニュー内にログアウトボタンを配置（PC・スマホ共通） */}
             <button
               onClick={onLogout}
-              className="mt-4 block w-full py-2 px-4 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+              className="mt-4 flex items-center space-x-2 w-full py-2 px-4 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
             >
-              ログアウト
+              <LogOut className="h-5 w-5" />
+              <span>ログアウト</span>
             </button>
           </div>
         </div>
-
-        {/* メインコンテンツ。サイドバーが開いているときは左に64pxのマージンを取る */}
+        {/* メインコンテンツ */}
         <main className={`flex-1 transition-all duration-300 ${menuOpen ? "ml-64" : "ml-0"}`}>
           {children}
         </main>
