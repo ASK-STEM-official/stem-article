@@ -1,10 +1,12 @@
+// App.tsx
 import React, { useState, useEffect } from "react";
 import {
-  HashRouter as Router,
+  HashRouter as Router, // HashRouterを使用する例
   Routes,
   Route,
   Navigate,
-} from "react-router-dom"; // HashRouter をインポート
+} from "react-router-dom";
+// Firebase Auth関連
 import {
   getAuth,
   setPersistence,
@@ -13,13 +15,16 @@ import {
   GithubAuthProvider,
   signOut,
   onAuthStateChanged,
-} from "firebase/auth"; // Firebase Authentication 用の関数をインポート
+} from "firebase/auth";
+// Firestore関連
 import {
   getFirestore,
   doc,
   setDoc,
   getDoc,
-} from "firebase/firestore"; // Firestore 用
+} from "firebase/firestore";
+
+// ページ・コンポーネント類
 import ArticleList from "./pages/ArticleList.tsx";
 import Profileset from "./pages/Profile-set.tsx";
 import ArticleDetail from "./pages/ArticleDetail.tsx";
@@ -39,24 +44,20 @@ interface UserData {
 }
 
 const App = () => {
-  // Firestore から取得したユーザーデータを保持する state
+  // Firestore から取得したユーザーデータ
   const [user, setUser] = useState<UserData | null>(null);
+  // ログインエラー等を表示するためのメッセージ
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 認証状態の初期化中フラグ（firebase の自動ログイン確認中に利用）
+  // Firebase Auth の初期化完了フラグ
   const [initializing, setInitializing] = useState<boolean>(true);
 
-  // OS のダークモード設定は Navbar 側で管理するため、ここでは不要
-
-  /**
-   * firebase の認証キャッシュを利用した自動ログイン処理
-   * onAuthStateChanged で認証状態の変化を監視し、ログイン済みの場合は Firestore からユーザーデータを取得します。
-   */
+  // onAuthStateChanged でログイン状態を監視
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // 既にログイン済みの場合、Firestore からユーザーデータを取得して状態を更新
+        // Firestore からユーザーデータを取得
         const userData = await fetchUserData(firebaseUser.uid);
         if (userData) {
           setUser(userData);
@@ -67,60 +68,49 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  /**
-   * GitHub 認証ボタンを押下した際のイベントハンドラ。
-   * Firebase Auth の signInWithPopup を使って GitHub ログインを行い、
-   * ログイン後に取得したトークンで組織所属を確認します。
-   * 所属が確認できたら、Firestore にユーザーデータを保存・取得します。
-   */
+  // GitHubログイン処理
   const handleGitHubLogin = async () => {
     try {
       const auth = getAuth();
-      // firebase の認証キャッシュ（local persistence）を明示的に設定
+      // ローカルに認証状態を保持
       await setPersistence(auth, browserLocalPersistence);
 
       const provider = new GithubAuthProvider();
-      // 組織の情報を取得するために "read:org" スコープを追加
+      // 組織チェック用に read:org スコープを追加
       provider.addScope("read:org");
 
-      // ポップアップで GitHub ログイン
+      // ポップアップでログイン
       const result = await signInWithPopup(auth, provider);
 
-      // 取得した Credential からアクセストークンを取り出す
+      // アクセストークンを取得
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = credential?.accessToken;
-
       if (!token) {
         throw new Error("アクセストークンを取得できませんでした。");
       }
 
-      // GitHub API を呼び出してユーザーが所属している組織を取得
+      // GitHub API でユーザーが所属している組織を取得
       const orgResponse = await fetch("https://api.github.com/user/orgs", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!orgResponse.ok) {
         throw new Error("GitHub API へのリクエストが失敗しました。");
       }
-
       const organizations = await orgResponse.json();
-      // 指定の組織に入っているかチェック (ここでは ASK-STEM-official を想定)
+
+      // 特定の組織に所属しているかどうかを確認
       const isInOrganization = organizations.some(
         (org: { login: string }) => org.login === "ASK-STEM-official"
       );
-
       if (isInOrganization) {
-        // 組織に所属している場合のみログイン許可
-        // Firestore にユーザー情報を保存（初回のみ）
+        // Firestore にユーザー情報を保存
         await saveUserData(result.user, token);
-
-        // Firestore からユーザーデータを取得して状態を更新
+        // 保存後に再取得して state を更新
         const userData = await fetchUserData(result.user.uid);
         setUser(userData);
       } else {
-        // 組織に所属していない場合はエラー扱い
         throw new Error("指定された組織に所属していません。ログインを許可できません。");
       }
     } catch (error: any) {
@@ -131,49 +121,43 @@ const App = () => {
     }
   };
 
+  // Firestore にユーザー情報を保存
   const saveUserData = async (firebaseUser: any, token: string) => {
     try {
       const db = getFirestore();
-      // Firebase Auth のユーザーIDをドキュメントIDにする
       const userRef = doc(db, "users", firebaseUser.uid);
 
-      // すでにユーザードキュメントがあるかどうかをチェック
       const existingDoc = await getDoc(userRef);
 
-      // GitHub API を使用してユーザーの詳細情報を取得
+      // GitHub API でユーザー詳細を取得
       const userResponse = await fetch("https://api.github.com/user", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!userResponse.ok) {
         throw new Error("GitHub API からユーザー情報の取得に失敗しました。");
       }
-
       const githubUser = await userResponse.json();
       const githubAvatar = githubUser.avatar_url || "";
       const githubDisplayName = githubUser.name || githubUser.login || "";
 
+      // ドキュメントがなければ新規作成
       if (!existingDoc.exists()) {
-        // ドキュメントが存在しない場合は新規作成する
         const userData = {
           avatarUrl: githubAvatar,
           displayName: githubDisplayName,
-          bio: "", // 初回は空文字
+          bio: "",
           uid: firebaseUser.uid,
         };
         await setDoc(userRef, userData);
       }
-      // 既存ドキュメントがある場合は何もしない（既存のデータを保持）
     } catch (error) {
       console.error("ユーザーデータの保存に失敗しました:", error);
     }
   };
 
-  /**
-   * Firestore からユーザーデータを取得する関数。
-   */
+  // Firestore からユーザーデータを取得
   const fetchUserData = async (uid: string): Promise<UserData | null> => {
     try {
       const db = getFirestore();
@@ -191,9 +175,7 @@ const App = () => {
     }
   };
 
-  /**
-   * ログアウトを行う関数。
-   */
+  // ログアウト処理
   const handleLogout = async () => {
     const auth = getAuth();
     try {
@@ -204,7 +186,7 @@ const App = () => {
     }
   };
 
-  // 認証状態の初期化中はローディング表示を行う
+  // Firebase Auth の初期化が終わるまでローディング表示
   if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -213,13 +195,10 @@ const App = () => {
     );
   }
 
-  /**
-   * ログインしていない場合は、GitHub ログインボタンのみ表示する。
-   * 組織に所属していない/ログインに失敗した場合は、エラーメッセージを表示する。
-   */
+  // 未ログイン時の画面
   if (!user) {
     return (
-      <div className="min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors duration-300">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <h2 className="mt-6 text-center text-3xl font-extrabold">
             STEM研究部記事投稿サイトへようこそ
@@ -248,26 +227,26 @@ const App = () => {
     );
   }
 
-  /**
-   * ログイン後は Navbar コンポーネント内にルーティングを配置し、
-   * Navbar がレイアウトやダークモード、サイドバーなどの管理を行います。
-   */
+  // ログイン済みの画面
   return (
-    <Router>
-      <Navbar user={user} onLogout={handleLogout}>
-        <Routes>
-          <Route path="/add-article" element={<AddArticle />} />
-          <Route path="/articles/:id" element={<ArticleDetail />} />
-          <Route path="/articles/:id/edit" element={<EditArticle />} />
-          <Route path="/users/:id" element={<UserProfile />} />
-          <Route path="/profileset" element={<Profileset user={user} />} />
-          <Route path="/rank" element={<Rank />} />
-          <Route path="/series/:id" element={<SeriesArticles />} />
-          <Route path="/" element={<ArticleList />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Navbar>
-    </Router>
+    <div className="min-h-screen bg-lightBackground dark:bg-darkBackground text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      <Router>
+        {/* ナビゲーションバー（サイドバー含む） */}
+        <Navbar user={user} onLogout={handleLogout}>
+          <Routes>
+            <Route path="/add-article" element={<AddArticle />} />
+            <Route path="/articles/:id" element={<ArticleDetail />} />
+            <Route path="/articles/:id/edit" element={<EditArticle />} />
+            <Route path="/users/:id" element={<UserProfile />} />
+            <Route path="/profileset" element={<Profileset user={user} />} />
+            <Route path="/rank" element={<Rank />} />
+            <Route path="/series/:id" element={<SeriesArticles />} />
+            <Route path="/" element={<ArticleList />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Navbar>
+      </Router>
+    </div>
   );
 };
 
