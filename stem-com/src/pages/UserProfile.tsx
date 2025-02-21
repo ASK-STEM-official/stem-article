@@ -8,7 +8,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { db } from "../lib/firebase/db.ts";
-import { User } from "lucide-react";
+import { User, PenLine } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -94,7 +94,7 @@ const UserProfile: React.FC = () => {
   // 経験値とレベルのデフォルト値（未設定の場合）
   const xp = userData.xp || 0;
   const level = userData.level || 1;
-  // 次のレベルまでの必要 xp は 100 とし、進捗率は xp の 100 に対する割合（％）で計算
+  // 次のレベルまでの必要xpは100とし、進捗率はxpの100に対する割合（％）で計算
   const progressPercent = Math.min((xp % 100), 100);
 
   return (
@@ -119,10 +119,10 @@ const UserProfile: React.FC = () => {
                 <button
                   type="button"
                   onClick={redirectToEditProfile}
-                  className="text-indigo-600 hover:underline"
+                  className="text-indigo-600 hover:text-indigo-800 transition-colors"
                   title="プロフィール編集"
                 >
-                  🖊
+                  <PenLine className="h-5 w-5" />
                 </button>
               )}
             </div>
@@ -149,7 +149,7 @@ const UserProfile: React.FC = () => {
           </div>
           <div className="w-full bg-gray-300 dark:bg-gray-600 rounded-full h-3 mt-1">
             <div
-              className={`bg-indigo-600 h-3 rounded-full progress-bar`}
+              className={`bg-indigo-600 h-3 rounded-full`}
               style={{ width: `${progressPercent}%` }}
             ></div>
           </div>
