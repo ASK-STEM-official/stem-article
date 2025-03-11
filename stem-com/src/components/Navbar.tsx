@@ -96,6 +96,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
   };
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
+
   const getInitials = (name: string | undefined) => {
     if (!name) return "";
     const names = name.split(" ");
@@ -116,7 +117,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, children }) => {
               </button>
               <Link to="/" className="flex items-center space-x-3">
                 <BookOpen className="h-8 w-8" />
-                <span className="font-bold text-xl">STEM-article</span>
+                <span className="font-bold text-xl">STEM研究部記事投稿サイト</span>
               </Link>
             </div>
             {/* 右側: ダークモードボタン + ユーザー情報 */}
