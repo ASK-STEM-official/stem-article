@@ -511,7 +511,7 @@ const AddArticle: React.FC = () => {
         {/* Discordチェックボックス */}
         <div className="form-group">
           <label className="block text-gray-700 dark:text-gray-300 mb-2">
-            Discordに紹介する
+            Discordに紹介しない
             <input
               type="checkbox"
               className="ml-2"
